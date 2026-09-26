@@ -40,7 +40,7 @@ LoRA 训练不塞进 A1111 的 Python 环境。生成与训练后端各自固定
   state/runtime.json
   logs/{setup.log,webui.log}
   userdata/
-    models/{Stable-diffusion,Lora,VAE}/
+    models/{Checkpoints,Lora,VAE,Hypernetworks}/
     embeddings/
     outputs/
 ```

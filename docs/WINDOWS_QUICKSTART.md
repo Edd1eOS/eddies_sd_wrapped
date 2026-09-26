@@ -18,7 +18,7 @@
 3. 首次打开时检查顶部“存储位置”。默认是仓库中的 `data/`；如需修改，点击 **更改存储位置** 并浏览到目标文件夹。
 4. 点击 **准备 / 修复引擎**。Launcher 会再次确认最终目录后开始下载；准备命令不会静默回退到其他目录。
 5. 等待启动器下载已锁定且校验 SHA-256 的官方便携运行时、A1111 源码和 Python/PyTorch 依赖。首次安装可能耗时较长，期间不要关闭 Launcher。
-6. 使用 **添加模型** 选择已有 checkpoint，或进入 **模型管理**：主模型放入 `Stable-diffusion`，VAE 放入 `VAE`，LoRA 放入 `Lora`。
+6. 使用 **添加模型** 选择已有 checkpoint，或进入 **模型管理**：主模型放入 `Checkpoints`，VAE 放入 `VAE`，LoRA 放入 `Lora`，Hypernetwork 放入 `Hypernetworks`。主模型常见格式为 `.safetensors` 和 `.ckpt`；启动器的文件选择入口出于安全考虑只直接导入 `.safetensors`，可信 `.ckpt` 可手动放入 `Checkpoints`。
 7. **下载通用基础模型** 当前提供约 4.27 GB 的 SD 1.5 pruned EMA-only checkpoint。文件按 SHA-256 锁定；下载前会显示社区镜像说明、来源和许可链接，只有用户明确确认后才开始。
 8. 点击 **打开生成界面**。如果服务尚未运行，Launcher 会先启动并完成健康检查，再自动打开浏览器。
 

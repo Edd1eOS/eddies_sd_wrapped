@@ -16,7 +16,7 @@
 2. 双击根目录的 **`Start Stable Diffusion.cmd`**。
 3. 点击“更改存储位置”可随时指定路径；未选择时默认使用仓库旁的 `data/`。该目录已被 Git 忽略，不会提交模型或用户产物。
 4. 点击“准备 / 修复引擎”准备本地引擎。
-5. 点击“添加模型”选择现有 `.safetensors`，在“模型管理”中分别管理 Checkpoint、VAE 和 LoRA，或明确接受许可后下载约 4.27 GB 的通用 SD 1.5 基础模型。
+5. 点击“添加模型”选择现有 `.safetensors`，在“模型管理”中分别管理 Checkpoint、VAE、LoRA 和 Hypernetwork，或明确接受许可后下载约 4.27 GB 的通用 SD 1.5 基础模型。
 6. 点击“打开生成界面”；如果服务尚未运行，Launcher 会自动启动后再打开浏览器。
 
 启动器本身不要求预装 Python、Git、Node.js 或 .NET SDK，也不会改写系统 Python、IDE 解释器或全局 `PATH`。首次 setup 会下载 A1111 官方便携引导包、固定 commit 的上游源码和 PyTorch 等依赖，因此需要网络、足够磁盘空间和一定等待时间。默认存储位置是启动器仓库中的 `data/`；也可以随时通过“更改存储位置”改到其他未加密本地路径。详细步骤与限制见 [`docs/WINDOWS_QUICKSTART.md`](docs/WINDOWS_QUICKSTART.md)，环境与分发约束见 [`docs/ENVIRONMENT_ISOLATION.md`](docs/ENVIRONMENT_ISOLATION.md)，RTX 5070 Laptop 的完整安装/生成/停止结果见 [`docs/VALIDATION.md`](docs/VALIDATION.md)。

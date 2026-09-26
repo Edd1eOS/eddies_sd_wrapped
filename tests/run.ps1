@@ -111,6 +111,18 @@ try {
     $roundTrip = Get-SdwConfiguration -Paths $paths
     Assert-SdwTest ([int]$roundTrip.port -eq 17860 -and $roundTrip.profileId -eq 'windows-nvidia-standard') 'configuration writes atomically and round-trips'
 
+    $legacyModelDirectory = $paths.LegacyCheckpointsRoot
+    $null = New-Item -ItemType Directory -Path $legacyModelDirectory -Force
+    $legacyModel = Join-Path $legacyModelDirectory 'legacy-model.safetensors'
+    [IO.File]::WriteAllBytes($legacyModel, [byte[]](7, 8, 9))
+    Move-SdwLegacyCheckpointFiles -Paths $paths | Out-Null
+    Assert-SdwTest ((Test-Path -LiteralPath (Join-Path $paths.CheckpointsRoot 'legacy-model.safetensors') -PathType Leaf) -and
+        -not (Test-Path -LiteralPath $legacyModelDirectory)) 'legacy Stable-diffusion models migrate into the descriptive Checkpoints folder'
+
+    $trustedCkpt = Join-Path $paths.CheckpointsRoot 'trusted-manual.ckpt'
+    [IO.File]::WriteAllBytes($trustedCkpt, [byte[]](4, 5, 6))
+    Assert-SdwTest (@(Get-SdwCheckpointFiles -Paths $paths | Where-Object { $_.Name -eq 'trusted-manual.ckpt' }).Count -eq 1) 'manually managed trusted .ckpt files count as checkpoints'
+
     $invalidModel = Join-Path $testRoot 'not-a-model.ckpt'
     [IO.File]::WriteAllBytes($invalidModel, [byte[]](1, 2, 3))
     $invalidRejected = $false
@@ -168,7 +180,9 @@ finally {
 
 $supervisorSource = Get-Content -LiteralPath (Join-Path $repositoryRoot 'scripts\supervisor.ps1') -Raw -Encoding UTF8
 Assert-SdwTest ($supervisorSource -match "'--api'" -and $supervisorSource -match "'--api-server-stop'" -and
-    $supervisorSource -match "'--server-name', '127\.0\.0\.1'" -and $supervisorSource -match "'--no-download-sd-model'") 'supervisor owns API, loopback, stop, and no-implicit-model arguments'
+    $supervisorSource -match "'--server-name', '127\.0\.0\.1'" -and $supervisorSource -match "'--no-download-sd-model'" -and
+    $supervisorSource -match "'--ckpt-dir'" -and $supervisorSource -match "'--vae-dir'" -and
+    $supervisorSource -match "'--lora-dir'" -and $supervisorSource -match "'--hypernetwork-dir'") 'supervisor owns API, loopback, model directories, stop, and no-implicit-model arguments'
 Assert-SdwTest ($supervisorSource -match 'Ensure-SdwUiSettings' -and
     $supervisorSource -match "'sd_model_checkpoint',\s*'sd_vae'") 'supervisor exposes checkpoint and VAE selectors without requiring manual A1111 settings'
 
@@ -190,6 +204,7 @@ Assert-SdwTest ($launcherSource -match '\$startButton\.Enabled\s*=\s*\$true' -an
     $launcherSource -match '\$openUiButton\.Enabled\s*=\s*\$true') 'primary lifecycle controls remain clickable and explain unmet prerequisites'
 Assert-SdwTest ($launcherSource -match '\$importButton\.Enabled\s*=\s*\$true' -and
     $launcherSource -match '\$downloadButton\.Enabled\s*=\s*\$true') 'model add and base-model download controls remain clickable'
+Assert-SdwTest ($launcherSource -match '(?s)Checkpoints.*VAE.*Hypernetworks.*LoRA|(?s)Checkpoints.*VAE.*LoRA.*Hypernetworks') 'model manager explains checkpoint, VAE, Hypernetwork, and LoRA folders'
 Assert-SdwTest ($launcherSource -match 'OpenUiAfterStart' -and
     $launcherSource -match "(?s)function\s+Invoke-SdwOpenUiFromUi.*?Queue-SdwAction\s+-Command\s+'start'") 'open WebUI can start a ready backend before opening the browser'
 

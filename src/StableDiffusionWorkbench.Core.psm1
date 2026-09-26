@@ -83,9 +83,11 @@ function Get-SdwPaths {
         RuntimeLogPath = Join-Path $logs 'webui.log'
         UserDataRoot = $userdata
         ModelsRoot = $models
-        CheckpointsRoot = Join-Path $models 'Stable-diffusion'
+        CheckpointsRoot = Join-Path $models 'Checkpoints'
+        LegacyCheckpointsRoot = Join-Path $models 'Stable-diffusion'
         LoraRoot = Join-Path $models 'Lora'
         VaeRoot = Join-Path $models 'VAE'
+        HypernetworksRoot = Join-Path $models 'Hypernetworks'
         EmbeddingsRoot = Join-Path $userdata 'embeddings'
         OutputsRoot = Join-Path $userdata 'outputs'
         UpstreamLockPath = Join-Path $repo 'configs\upstream-lock.json'
@@ -103,12 +105,50 @@ function Initialize-SdwLayout {
         $Paths.DataRoot, $Paths.RuntimeRoot, $Paths.VersionsRoot, $Paths.StagingRoot,
         $Paths.DownloadsRoot, $Paths.StateDirectory, $Paths.LogsRoot,
         $Paths.UserDataRoot, $Paths.ModelsRoot, $Paths.CheckpointsRoot,
-        $Paths.LoraRoot, $Paths.VaeRoot, $Paths.EmbeddingsRoot, $Paths.OutputsRoot
+        $Paths.LoraRoot, $Paths.VaeRoot, $Paths.HypernetworksRoot,
+        $Paths.EmbeddingsRoot, $Paths.OutputsRoot
     )
     foreach ($directory in $directories) {
         if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
             $null = New-Item -ItemType Directory -Path $directory -Force
         }
+    }
+}
+
+function Move-SdwLegacyCheckpointFiles {
+    param([Parameter(Mandatory = $true)]$Paths)
+
+    if (-not (Test-Path -LiteralPath $Paths.LegacyCheckpointsRoot -PathType Container)) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $Paths.CheckpointsRoot -PathType Container)) {
+        $null = New-Item -ItemType Directory -Path $Paths.CheckpointsRoot -Force
+    }
+    $legacyPrefix = [IO.Path]::GetFullPath($Paths.LegacyCheckpointsRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    foreach ($source in @(Get-ChildItem -LiteralPath $Paths.LegacyCheckpointsRoot -File -Recurse -ErrorAction SilentlyContinue)) {
+        $sourceFull = [IO.Path]::GetFullPath($source.FullName)
+        if (-not $sourceFull.StartsWith($legacyPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            Throw-SdwError -Message 'Legacy checkpoint migration escaped its managed directory.' -ExitCode 9
+        }
+        $relativePath = $sourceFull.Substring($legacyPrefix.Length)
+        $destination = Join-Path $Paths.CheckpointsRoot $relativePath
+        $destinationDirectory = Split-Path -Parent $destination
+        if (-not (Test-Path -LiteralPath $destinationDirectory -PathType Container)) {
+            $null = New-Item -ItemType Directory -Path $destinationDirectory -Force
+        }
+        if (Test-Path -LiteralPath $destination -PathType Leaf) {
+            $sourceHash = Get-SdwFileHashValue -Path $sourceFull
+            $destinationHash = Get-SdwFileHashValue -Path $destination
+            if ($sourceHash -ne $destinationHash) {
+                Throw-SdwError -Message ("Cannot migrate legacy checkpoint file because a different destination exists: {0}" -f $destination) -ExitCode 5
+            }
+            continue
+        }
+        Move-Item -LiteralPath $sourceFull -Destination $destination
+        Write-Output ("Moved legacy model file into Checkpoints: {0}" -f $destination)
+    }
+    if (@(Get-ChildItem -LiteralPath $Paths.LegacyCheckpointsRoot -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+        Remove-Item -LiteralPath $Paths.LegacyCheckpointsRoot -Force
     }
 }
 
@@ -595,7 +635,8 @@ function Assert-SdwSafeProfileArguments {
         '--listen', '--share', '--enable-insecure-extension-access', '--api-auth', '--gradio-auth',
         '--tls-keyfile', '--tls-certfile', '--port', '--data-dir', '--server-name', '--api',
         '--api-server-stop', '--no-download-sd-model', '--disable-extra-extensions', '--allow-code',
-        '--disable-safe-unpickle', '--autolaunch'
+        '--disable-safe-unpickle', '--autolaunch', '--ckpt-dir', '--vae-dir', '--lora-dir',
+        '--hypernetwork-dir', '--embeddings-dir'
     )
     foreach ($argument in $Arguments) {
         $lower = $argument.ToLowerInvariant()
@@ -1079,8 +1120,16 @@ function Invoke-SdwSetup {
 
 function Get-SdwCheckpointFiles {
     param([Parameter(Mandatory = $true)]$Paths)
-    if (-not (Test-Path -LiteralPath $Paths.CheckpointsRoot -PathType Container)) { return @() }
-    return @(Get-ChildItem -LiteralPath $Paths.CheckpointsRoot -Filter '*.safetensors' -File -ErrorAction SilentlyContinue)
+    $files = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($root in @($Paths.CheckpointsRoot, $Paths.LegacyCheckpointsRoot)) {
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
+        foreach ($file in @(Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction SilentlyContinue)) {
+            if ($file.Extension -ieq '.safetensors' -or $file.Extension -ieq '.ckpt') {
+                $files.Add($file)
+            }
+        }
+    }
+    return $files.ToArray()
 }
 
 function Import-SdwModel {
@@ -1353,9 +1402,6 @@ function Invoke-SdwStart {
     if ($null -eq $active) {
         Throw-SdwError -Message 'The runtime is not installed or failed validation. Run setup or repair first.' -ExitCode 3
     }
-    $models = @(Get-SdwCheckpointFiles -Paths $paths)
-    if ($models.Count -eq 0) { Throw-SdwError -Message 'No .safetensors checkpoint is installed. Import or download a model before starting.' -ExitCode 4 }
-
     Initialize-SdwLayout -Paths $paths
     $mutex = New-Object Threading.Mutex($false, (Get-SdwOperationMutexName -DataRoot $paths.DataRoot))
     $locked = $false
@@ -1375,6 +1421,11 @@ function Invoke-SdwStart {
             Write-Output 'A launcher-owned WebUI is already starting; waiting for it to become healthy...'
         }
         else {
+            Move-SdwLegacyCheckpointFiles -Paths $paths | ForEach-Object { Write-Output $_ }
+            $models = @(Get-SdwCheckpointFiles -Paths $paths)
+            if ($models.Count -eq 0) {
+                Throw-SdwError -Message 'No checkpoint is installed. Add a .safetensors or trusted .ckpt model before starting.' -ExitCode 4
+            }
             if (-not (Test-SdwPortAvailable -Port $Port)) {
                 Throw-SdwError -Message ("Port {0} is already in use. The launcher will not stop or replace an unrelated process." -f $Port) -ExitCode 5
             }
@@ -1525,7 +1576,7 @@ function Get-SdwSummary {
         if ($running) { $healthy = Test-SdwHealth -Url $url }
     }
     if (-not $installed) { $status = 'notInstalled'; $message = 'Runtime is not installed or failed validation.' }
-    elseif ($models.Count -eq 0) { $status = 'missingModel'; $message = 'Import or download a .safetensors checkpoint.' }
+    elseif ($models.Count -eq 0) { $status = 'missingModel'; $message = 'Add a .safetensors or trusted .ckpt checkpoint.' }
     elseif ($running -and $healthy) { $status = 'running'; $message = 'WebUI is running.' }
     elseif ($running) { $status = 'starting'; $message = 'WebUI process is starting but not healthy yet.' }
     elseif ($null -ne $state -and $state.status -eq 'exited' -and [int]$state.exitCode -ne 0) { $status = 'faulted'; $message = 'WebUI exited with an error. Check the log.' }
@@ -1636,8 +1687,8 @@ function Invoke-SdwDoctor {
     }
 
     $models = @(Get-SdwCheckpointFiles -Paths $paths)
-    if ($models.Count -gt 0) { $checks.Add((New-SdwDoctorCheck 'model' 'pass' 'info' ("{0} .safetensors checkpoint(s) found." -f $models.Count) '')) }
-    else { $checks.Add((New-SdwDoctorCheck 'model' 'fail' 'error' 'No .safetensors checkpoint was found.' 'Import a model or download the reviewed starter model.')) }
+    if ($models.Count -gt 0) { $checks.Add((New-SdwDoctorCheck 'model' 'pass' 'info' ("{0} checkpoint model(s) found." -f $models.Count) '')) }
+    else { $checks.Add((New-SdwDoctorCheck 'model' 'fail' 'error' 'No checkpoint model was found.' 'Add a .safetensors model or download the reviewed base model.')) }
 
     $state = Read-SdwJson -Path $paths.StatePath -Optional
     if ($null -ne $state -and (Test-SdwManagedRuntimeState -Paths $paths -State $state)) {
@@ -1714,6 +1765,7 @@ function Get-SdwLogs {
 
 Export-ModuleMember -Function @(
     'New-SdwException', 'Get-SdwExitCode', 'Resolve-SdwDataRoot', 'Get-SdwPaths', 'Initialize-SdwLayout',
+    'Move-SdwLegacyCheckpointFiles', 'Get-SdwCheckpointFiles',
     'Read-SdwJson', 'Write-SdwJsonAtomic', 'ConvertTo-SdwCommandLineArgument',
     'Join-SdwCommandLine', 'Invoke-SdwNativeCommand', 'Get-SdwFileHashValue',
     'Test-SdwFileIntegrity', 'Invoke-SdwDownload', 'Expand-SdwPortableSystem',

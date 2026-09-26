@@ -177,7 +177,8 @@ $forbidden = @(
     '--listen', '--share', '--enable-insecure-extension-access', '--api-auth', '--gradio-auth',
     '--tls-keyfile', '--tls-certfile', '--port', '--data-dir', '--server-name', '--api',
     '--api-server-stop', '--no-download-sd-model', '--disable-extra-extensions', '--allow-code',
-    '--disable-safe-unpickle', '--autolaunch'
+    '--disable-safe-unpickle', '--autolaunch', '--ckpt-dir', '--vae-dir', '--lora-dir',
+    '--hypernetwork-dir', '--embeddings-dir'
 )
 foreach ($argument in $profileArguments) {
     $lower = $argument.ToLowerInvariant()
@@ -188,6 +189,17 @@ foreach ($argument in $profileArguments) {
 
 $userDataRoot = Join-Path $DataRoot 'userdata'
 if (-not (Test-Path -LiteralPath $userDataRoot)) { $null = New-Item -ItemType Directory -Path $userDataRoot -Force }
+$modelsRoot = Join-Path $userDataRoot 'models'
+$checkpointsRoot = Join-Path $modelsRoot 'Checkpoints'
+$vaeRoot = Join-Path $modelsRoot 'VAE'
+$loraRoot = Join-Path $modelsRoot 'Lora'
+$hypernetworksRoot = Join-Path $modelsRoot 'Hypernetworks'
+$embeddingsRoot = Join-Path $userDataRoot 'embeddings'
+foreach ($managedDirectory in @($modelsRoot, $checkpointsRoot, $vaeRoot, $loraRoot, $hypernetworksRoot, $embeddingsRoot)) {
+    if (-not (Test-Path -LiteralPath $managedDirectory -PathType Container)) {
+        $null = New-Item -ItemType Directory -Path $managedDirectory -Force
+    }
+}
 $logDirectory = Split-Path -Parent $LogPath
 if (-not (Test-Path -LiteralPath $logDirectory)) { $null = New-Item -ItemType Directory -Path $logDirectory -Force }
 $logEncoding = New-Object Text.UTF8Encoding($false)
@@ -234,6 +246,11 @@ try {
         '--disable-extra-extensions',
         '--server-name', '127.0.0.1',
         '--data-dir', $userDataRoot,
+        '--ckpt-dir', $checkpointsRoot,
+        '--vae-dir', $vaeRoot,
+        '--lora-dir', $loraRoot,
+        '--hypernetwork-dir', $hypernetworksRoot,
+        '--embeddings-dir', $embeddingsRoot,
         '--port', [string]$Port
     ) + $profileArguments
 

@@ -1333,7 +1333,7 @@ catch {
             Show-SdwBusyNotice
             return
         }
-        Show-SdwLifecycleNotice -Title '模型管理' -Message "即将打开模型文件夹。`r`n`r`n• Checkpoint 主模型放入 Stable-diffusion`r`n• VAE 放入 VAE`r`n• LoRA 放入 Lora`r`n`r`n支持的模型文件优先使用 .safetensors。生成引擎正在运行时，新文件可能需要在生成界面点击刷新，或重新启动引擎后出现。"
+        Show-SdwLifecycleNotice -Title '模型管理' -Message "现在打开的是模型管理文件夹。`r`n`r`n• 主模型放在 Checkpoints 文件夹，常见格式是 .safetensors 和 .ckpt；推荐优先使用更安全的 .safetensors。`r`n`r`n• VAE 是图像解析器，通常负责颜色和细节。文件名经常带 .vae，实际后缀多为 .safetensors、.pt 或 .ckpt。`r`n`r`n• Hypernetworks 和 LoRA 都是用来追加权重效果的扩展，原理不同，但使用目的比较接近。`r`n`r`n• Codeformer 和 GFPGAN 是人脸修复工具，不是主模型，平时不用手动管理。`r`n`r`n生成引擎正在运行时，新文件可能需要在生成界面点击刷新，或重新启动引擎后出现。"
         Queue-SdwAction -Command 'open-models' -Parameters ([ordered]@{}) -DisplayName '打开模型管理'
     })
     $openOutputsButton.Add_Click({ Queue-SdwAction -Command 'open-outputs' -Parameters ([ordered]@{}) -DisplayName '打开输出管理' })
