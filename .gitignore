@@ -1,0 +1,49 @@
+# 本地环境与密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python / 虚拟环境
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# JavaScript（若后续引入界面）
+node_modules/
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 运行产物
+artifacts/
+cache/
+generated/
+logs/
+outputs/
+tmp/
+*.log
+
+# 模型目录只保留说明
+models/*
+!models/README.md
+
+# 常见模型与推理权重：无论放在哪里都不得提交
+*.ckpt
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.gguf
+
+# 下载或检出的上游源码
+upstream/
+vendor/
