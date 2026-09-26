@@ -173,6 +173,14 @@ Assert-SdwTest ($supervisorSource -match "'--api'" -and $supervisorSource -match
 $entrypoint = Get-Content -LiteralPath (Join-Path $repositoryRoot 'Start Stable Diffusion.cmd') -Raw -Encoding UTF8
 Assert-SdwTest ($entrypoint -match '(?i)start\s+"".*powershell' -and $entrypoint -match '(?i)-WindowStyle\s+Hidden') 'double-click entry point launches the GUI without a lingering console'
 
+$launcherSource = Get-Content -LiteralPath (Join-Path $repositoryRoot 'launcher\StableDiffusionWorkbench.ps1') -Raw -Encoding UTF8
+Assert-SdwTest ($launcherSource -match 'Show-SdwSettingsDialog\s+-InstallMode' -and
+    $launcherSource -match '(?s)Queue-SdwAction\s+-Command\s+''setup''.*?DataRoot\s*=\s*\$selectedRoot' -and
+    $launcherSource -match '\$Command\s+-eq\s+''setup''\s+-or\s+\$Command\s+-eq\s+''repair''') 'first install requires an explicitly confirmed data root'
+Assert-SdwTest ($launcherSource -match 'Test-SdwLauncherPathEncrypted' -and
+    $launcherSource -match 'Windows EFS') 'launcher rejects an EFS-encrypted install destination before setup'
+Assert-SdwTest ($launcherSource -match '\$actionGroup\.Text\s*=\s*if\s*\(\$busy\)') 'launcher visibly explains the locked action state during a long-running task'
+
 $bootstrapSources = @(
     (Get-Content -LiteralPath (Join-Path $repositoryRoot 'Start Stable Diffusion.cmd') -Raw -Encoding UTF8),
     (Get-Content -LiteralPath (Join-Path $repositoryRoot 'scripts\sdw.ps1') -Raw -Encoding UTF8),

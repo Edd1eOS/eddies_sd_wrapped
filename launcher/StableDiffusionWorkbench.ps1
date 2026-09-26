@@ -232,6 +232,29 @@ public sealed class SdwProcessOutputPump
         }
     }
 
+    function Test-SdwLauncherPathEncrypted {
+        param([Parameter(Mandatory = $true)][string]$Path)
+
+        $candidate = [System.IO.Path]::GetFullPath($Path)
+        while (-not (Test-Path -LiteralPath $candidate) -and -not [string]::IsNullOrWhiteSpace($candidate)) {
+            $parent = Split-Path -Parent $candidate
+            if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $candidate) {
+                break
+            }
+            $candidate = $parent
+        }
+        if (-not (Test-Path -LiteralPath $candidate)) {
+            return $false
+        }
+        try {
+            $attributes = (Get-Item -LiteralPath $candidate -Force).Attributes
+            return (($attributes -band [System.IO.FileAttributes]::Encrypted) -eq [System.IO.FileAttributes]::Encrypted)
+        }
+        catch {
+            return $false
+        }
+    }
+
     function Get-SdwObjectValue {
         param(
             [AllowNull()][object]$InputObject,
@@ -551,6 +574,13 @@ catch {
         $url = Get-SdwObjectValue $script:CurrentSummary @('url', 'webUiUrl') $null
         $stopped = (-not $running -and $state -ne 'starting')
 
+        $actionGroup.Text = if ($busy) {
+            ' 操作（当前任务执行中；为避免安装或运行环境损坏，相关按钮暂时锁定） '
+        }
+        else {
+            ' 操作 '
+        }
+
         $setupButton.Enabled = (-not $busy -and $stopped)
         $startButton.Enabled = (-not $busy -and $installed -and $hasModel -and $stopped)
         $stopButton.Enabled = (-not $busy -and ($running -or $state -eq 'starting'))
@@ -719,6 +749,11 @@ catch {
             foreach ($parameterKey in $Parameters.Keys) {
                 $effectiveParameters[[string]$parameterKey] = $Parameters[$parameterKey]
             }
+        }
+        if (($Command -eq 'setup' -or $Command -eq 'repair') -and
+            (-not $effectiveParameters.Contains('DataRoot') -or
+             [string]::IsNullOrWhiteSpace([string]$effectiveParameters['DataRoot']))) {
+            throw '安装或修复前必须先确认数据目录。请点击“数据目录 / 端口”。'
         }
         $tokens = Get-SdwValidatedTokens -Command $Command -Parameters $effectiveParameters
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -956,6 +991,8 @@ catch {
     }
 
     function Show-SdwSettingsDialog {
+        param([switch]$InstallMode)
+
         $running = ConvertTo-SdwBoolean (Get-SdwObjectValue $script:CurrentSummary @('running') $false)
         $state = Get-SdwNormalizedState $script:CurrentSummary
         if ($running -or $state -eq 'starting') {
@@ -968,7 +1005,7 @@ catch {
         }
 
         $dialog = New-Object System.Windows.Forms.Form
-        $dialog.Text = '数据目录与端口'
+        $dialog.Text = if ($InstallMode) { '确认 Stable Diffusion 安装位置' } else { '数据目录与端口' }
         $dialog.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterParent
         $dialog.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
         $dialog.MaximizeBox = $false
@@ -977,13 +1014,16 @@ catch {
         $dialog.Font = $form.Font
 
         $dataCaption = New-Object System.Windows.Forms.Label
-        $dataCaption.Text = '数据目录'
+        $dataCaption.Text = if ($InstallMode) { '安装数据目录（运行时、模型、输出）' } else { '数据目录' }
         $dataCaption.Location = New-Object System.Drawing.Point(20, 22)
         $dataCaption.AutoSize = $true
         $dataText = New-Object System.Windows.Forms.TextBox
         $dataText.Location = New-Object System.Drawing.Point(20, 47)
         $dataText.Size = New-Object System.Drawing.Size(470, 28)
-        $currentDataRoot = [string](Get-SdwObjectValue $script:CurrentSummary @('dataRoot') '')
+        $currentDataRoot = [string]$script:LauncherDataRoot
+        if ([string]::IsNullOrWhiteSpace($currentDataRoot)) {
+            $currentDataRoot = [string](Get-SdwObjectValue $script:CurrentSummary @('dataRoot') '')
+        }
         if ([string]::IsNullOrWhiteSpace($currentDataRoot)) {
             $currentDataRoot = Join-Path $env:LOCALAPPDATA 'StableDiffusionWorkbench'
         }
@@ -1008,7 +1048,7 @@ catch {
         $portInput.Value = $parsedPort
 
         $saveButton = New-Object System.Windows.Forms.Button
-        $saveButton.Text = '保存'
+        $saveButton.Text = if ($InstallMode) { '确认并安装' } else { '保存' }
         $saveButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
         $saveButton.Location = New-Object System.Drawing.Point(399, 169)
         $saveButton.Size = New-Object System.Drawing.Size(94, 34)
@@ -1043,10 +1083,34 @@ catch {
                     throw '请选择一个绝对路径作为数据目录。'
                 }
                 $selectedRoot = [System.IO.Path]::GetFullPath($dataText.Text)
-                Queue-SdwAction -Command 'configure' -Parameters ([ordered]@{
-                    DataRoot = $selectedRoot
-                    Port = [int]$portInput.Value
-                }) -DisplayName '保存设置'
+                if (Test-SdwLauncherPathEncrypted -Path $selectedRoot) {
+                    throw "所选目录继承了 Windows EFS 加密，无法可靠安装 Python 包：$selectedRoot`r`n`r`n请选择未加密的本地目录，例如 D:\StableDiffusionWorkbench。"
+                }
+                if ($InstallMode) {
+                    $confirmation = [System.Windows.Forms.MessageBox]::Show(
+                        $dialog,
+                        "Stable Diffusion 的隔离 Python、PyTorch、模型和输出将存放在：`r`n`r`n$selectedRoot`r`n`r`n安装不会修改系统 Python 或全局 PATH。是否开始安装？",
+                        '确认安装位置',
+                        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                        [System.Windows.Forms.MessageBoxIcon]::Question,
+                        [System.Windows.Forms.MessageBoxDefaultButton]::Button1
+                    )
+                    if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
+                        Save-SdwLauncherSettings -DataRoot $selectedRoot
+                        $dataRootLabel.Text = $selectedRoot
+                        $toolTip.SetToolTip($dataRootLabel, $selectedRoot)
+                        Add-SdwLogLine "已确认安装数据目录：$selectedRoot"
+                        Queue-SdwAction -Command 'setup' -Parameters ([ordered]@{
+                            DataRoot = $selectedRoot
+                        }) -DisplayName '安装 Stable Diffusion'
+                    }
+                }
+                else {
+                    Queue-SdwAction -Command 'configure' -Parameters ([ordered]@{
+                        DataRoot = $selectedRoot
+                        Port = [int]$portInput.Value
+                    }) -DisplayName '保存设置'
+                }
             }
             catch {
                 [void][System.Windows.Forms.MessageBox]::Show(
@@ -1097,7 +1161,7 @@ catch {
         $state = Get-SdwNormalizedState $script:CurrentSummary
         $installed = ConvertTo-SdwBoolean (Get-SdwObjectValue $script:CurrentSummary @('installed') $false)
         if (-not $installed -or $state -eq 'unconfigured' -or $state -eq 'notinstalled') {
-            Queue-SdwAction -Command 'setup' -Parameters ([ordered]@{}) -DisplayName '安装 Stable Diffusion'
+            Show-SdwSettingsDialog -InstallMode
         }
         else {
             Queue-SdwAction -Command 'repair' -Parameters ([ordered]@{}) -DisplayName '检查并修复环境'
@@ -1202,6 +1266,9 @@ $($asset.LicenseUrl)
 
     $form.Add_Shown({
         Add-SdwLogLine '启动器已就绪。所有安装和运行命令将通过 scripts\sdw.ps1 执行。'
+        if (-not [string]::IsNullOrWhiteSpace($script:LauncherDataRoot)) {
+            Add-SdwLogLine "已加载数据目录：$script:LauncherDataRoot"
+        }
         if (-not [string]::IsNullOrWhiteSpace($script:LauncherSettingsWarning)) {
             Add-SdwLogLine $script:LauncherSettingsWarning
         }
