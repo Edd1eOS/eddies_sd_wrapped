@@ -70,7 +70,7 @@ LoRA 训练不塞进 A1111 的 Python 环境。生成与训练后端各自固定
 
 - Windows 10/11 x64 + NVIDIA 的一键 `setup/start/stop/status/doctor`。
 - 标准 NVIDIA 与 RTX 50/Blackwell 两个固定 Profile，不跟踪浮动分支。
-- `.safetensors` checkpoint 安全导入，以及带来源、许可和 hash 确认的可选入门模型。
+- `.safetensors` checkpoint 安全添加，以及带来源、社区镜像说明、许可和 hash 确认的可选通用基础模型。
 - A1111 原生 txt2img/img2img/inpaint UI 与 localhost REST API。
 - 默认 loopback、禁用额外扩展、禁用 share/远程监听，并且只停止通过所有权验证的进程。
 - 训练、MCP、update/rollback、多实例、扩展管理、AMD/Intel 与非 Windows 平台不在当前验收边界。

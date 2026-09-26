@@ -11,14 +11,14 @@
 - 验证 v1.10.1/固定 master commit 的支持矩阵与正式通道。
 - 为 RTX 50/Blackwell 验证固定 dev commit + PyTorch 2.7 实验通道。
 - 复现 REST API、数据目录重定向、模型导入和生成烟测。
-- 记录 A1111、便携运行时、PyTorch 与入门模型的来源和许可证；发布前仍需正式完成递归许可/SBOM 审查。
+- 记录 A1111、便携运行时、PyTorch 与通用基础模型的来源和许可证；发布前仍需正式完成递归许可/SBOM 审查。
 
 ## Phase 2：Windows Launcher MVP（当前）
 
 - 实现可重复的便携 `setup`，不依赖系统 Python/Git。
 - 实现图形 Launcher、可靠的 `start`/`stop`、健康检查和日志。
 - 实现只读优先、输出可操作建议的 `doctor`。
-- 实现固定标准/Blackwell Profile、模型导入和带许可证确认的入门模型下载。
+- 实现固定标准/Blackwell Profile、模型添加和带许可证确认的通用基础模型下载。
 - 将运行时、模型、配置、输出和日志保持在用户选择且不被 Git 跟踪的数据目录；便携默认使用仓库中的 `data/`。
 - 用无 GPU/无大下载的单元测试覆盖配置、Profile、命令、环境隔离与进程所有权；RTX 5070 Laptop 的 setup/import/start/API txt2img/stop 实机闭环已完成，标准 NVIDIA Profile 的同等矩阵后续补充。
 - 多实例、版本更新/回滚和完整资产图库后置。

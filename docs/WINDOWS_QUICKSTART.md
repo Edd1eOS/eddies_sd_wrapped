@@ -8,19 +8,21 @@
 - 首次安装需要访问 GitHub、PyPI、PyTorch 下载源和模型来源。
 - 不要求预先安装 Python、Git、Node.js 或 .NET SDK。启动器使用 Windows 自带 PowerShell，并从 A1111 官方便携包准备隔离的 Python 3.10.6 与 Git。
 - 不需要创建 virtualenv 或修改 `PATH`。便携 Python 只在 A1111 子进程内可见，也不会改写 VS Code/Cursor 的解释器设置；完整边界见 `ENVIRONMENT_ISOLATION.md`。
-- 所有运行时、模型、输出和日志默认位于启动器仓库的 `data/` 子目录；该目录被 Git 忽略。用户可通过“选择数据目录”改到任意合适的本地路径。
+- 所有运行时、模型、输出和日志默认位于启动器仓库的 `data/` 子目录；该目录被 Git 忽略。用户可通过“更改存储位置”改到任意合适的本地路径。
 - 如果该目录继承了 Windows EFS 加密，`doctor/setup` 会明确拒绝，因为 pip 的原子文件替换在某些 EFS 环境下会失败。请在 Launcher 的“设置”中选择未加密的本地目录，例如 `D:\StableDiffusionWorkbench`。
 
 ## 图形化流程
 
 1. 克隆或下载本仓库。
 2. 双击仓库根目录的 `Start Stable Diffusion.cmd`。
-3. 首次打开时检查顶部“数据目录”。默认是仓库中的 `data/`；如需修改，点击 **选择数据目录** 并浏览到目标文件夹。
-4. 点击 **一键安装/修复**。Launcher 会再次确认最终目录后开始下载；安装命令不会静默回退到其他目录。
+3. 首次打开时检查顶部“存储位置”。默认是仓库中的 `data/`；如需修改，点击 **更改存储位置** 并浏览到目标文件夹。
+4. 点击 **准备 / 修复引擎**。Launcher 会再次确认最终目录后开始下载；准备命令不会静默回退到其他目录。
 5. 等待启动器下载已锁定且校验 SHA-256 的官方便携运行时、A1111 源码和 Python/PyTorch 依赖。首次安装可能耗时较长，期间不要关闭 Launcher。
-6. 使用 **导入 .safetensors** 选择已有模型，或选择 **下载入门模型**。
-7. 入门模型约 4.27 GB；它来自当前可用的 SD 1.5 社区镜像，文件 SHA-256 与原 checkpoint 一致。下载前会显示镜像说明、来源和许可链接，只有用户明确确认后才开始。
-8. 点击 **打开 WebUI**。如果服务尚未运行，Launcher 会先启动并完成健康检查，再自动打开浏览器。
+6. 使用 **添加模型** 选择已有 checkpoint，或进入 **模型管理**：主模型放入 `Stable-diffusion`，VAE 放入 `VAE`，LoRA 放入 `Lora`。
+7. **下载通用基础模型** 当前提供约 4.27 GB 的 SD 1.5 pruned EMA-only checkpoint。文件按 SHA-256 锁定；下载前会显示社区镜像说明、来源和许可链接，只有用户明确确认后才开始。
+8. 点击 **打开生成界面**。如果服务尚未运行，Launcher 会先启动并完成健康检查，再自动打开浏览器。
+
+生成界面顶部默认显示 Checkpoint 和 VAE 两个选择器。Checkpoint 是主要生成模型；VAE 负责把潜空间结果解码为图像，常影响颜色、对比度和细节。许多 checkpoint 已内置 VAE，此时保持 `Automatic` 即可；只有模型说明要求特定 VAE 时，才需要把对应文件放入模型管理中的 `VAE` 文件夹并选择它。
 8. 结束使用时点击 **停止**；Launcher 只停止由本工作台启动并通过所有权校验的进程。
 
 RTX 50 系列会自动选择固定 commit 的 Blackwell 实验 Profile 和 CUDA 12.8/PyTorch 2.7 路径。其他 NVIDIA GPU 使用固定的 A1111 v1.10.1 Profile。Profile 均锁定完整 commit，不在启动时追踪浮动分支。
@@ -38,13 +40,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\sdw.ps1 -Comma
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\sdw.ps1 -Command stop
 ```
 
-下载入门模型需要显式接受该模型自己的许可证：
+下载通用基础模型需要显式接受该模型自己的许可证：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\sdw.ps1 -Command download-starter-model -AcceptLicense
 ```
 
-## 数据目录与端口
+## 存储位置与端口
 
 Launcher 设置中可在停止状态修改数据根目录和端口。命令行也可以配置：
 

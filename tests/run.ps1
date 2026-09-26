@@ -169,6 +169,8 @@ finally {
 $supervisorSource = Get-Content -LiteralPath (Join-Path $repositoryRoot 'scripts\supervisor.ps1') -Raw -Encoding UTF8
 Assert-SdwTest ($supervisorSource -match "'--api'" -and $supervisorSource -match "'--api-server-stop'" -and
     $supervisorSource -match "'--server-name', '127\.0\.0\.1'" -and $supervisorSource -match "'--no-download-sd-model'") 'supervisor owns API, loopback, stop, and no-implicit-model arguments'
+Assert-SdwTest ($supervisorSource -match 'Ensure-SdwUiSettings' -and
+    $supervisorSource -match "'sd_model_checkpoint',\s*'sd_vae'") 'supervisor exposes checkpoint and VAE selectors without requiring manual A1111 settings'
 
 $entrypoint = Get-Content -LiteralPath (Join-Path $repositoryRoot 'Start Stable Diffusion.cmd') -Raw -Encoding UTF8
 Assert-SdwTest ($entrypoint -match '(?i)start\s+"".*powershell' -and $entrypoint -match '(?i)-WindowStyle\s+Hidden') 'double-click entry point launches the GUI without a lingering console'
@@ -186,6 +188,8 @@ Assert-SdwTest ($launcherSource -match 'Join-Path\s+\$script:RepositoryRoot\s+''
 Assert-SdwTest ($launcherSource -match '\$startButton\.Enabled\s*=\s*\$true' -and
     $launcherSource -match '\$stopButton\.Enabled\s*=\s*\$true' -and
     $launcherSource -match '\$openUiButton\.Enabled\s*=\s*\$true') 'primary lifecycle controls remain clickable and explain unmet prerequisites'
+Assert-SdwTest ($launcherSource -match '\$importButton\.Enabled\s*=\s*\$true' -and
+    $launcherSource -match '\$downloadButton\.Enabled\s*=\s*\$true') 'model add and base-model download controls remain clickable'
 Assert-SdwTest ($launcherSource -match 'OpenUiAfterStart' -and
     $launcherSource -match "(?s)function\s+Invoke-SdwOpenUiFromUi.*?Queue-SdwAction\s+-Command\s+'start'") 'open WebUI can start a ready backend before opening the browser'
 

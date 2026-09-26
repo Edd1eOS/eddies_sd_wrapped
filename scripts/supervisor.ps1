@@ -66,6 +66,66 @@ function Write-StateAtomic {
     }
 }
 
+function Ensure-SdwUiSettings {
+    param([Parameter(Mandatory = $true)][string]$UserDataRoot)
+
+    $settingsPath = Join-Path $UserDataRoot 'config.json'
+    $settings = New-Object PSObject
+    if (Test-Path -LiteralPath $settingsPath -PathType Leaf) {
+        try {
+            $settings = [IO.File]::ReadAllText($settingsPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+        }
+        catch {
+            throw "Unable to read A1111 UI settings: $($_.Exception.Message)"
+        }
+    }
+
+    $quickSettings = @()
+    $property = $settings.PSObject.Properties['quicksettings_list']
+    if ($null -ne $property) {
+        if ($property.Value -is [string]) {
+            $quickSettings = @([string]$property.Value -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        }
+        else {
+            $quickSettings = @($property.Value | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+    }
+    foreach ($requiredSetting in @('sd_model_checkpoint', 'sd_vae')) {
+        if ($quickSettings -notcontains $requiredSetting) {
+            $quickSettings += $requiredSetting
+        }
+    }
+    if ($null -eq $property) {
+        $settings | Add-Member -NotePropertyName 'quicksettings_list' -NotePropertyValue $quickSettings
+    }
+    else {
+        $settings.quicksettings_list = $quickSettings
+    }
+
+    $temporaryPath = Join-Path $UserDataRoot ('.config.{0}.tmp' -f [Guid]::NewGuid().ToString('N'))
+    $backupPath = Join-Path $UserDataRoot ('.config.{0}.bak' -f [Guid]::NewGuid().ToString('N'))
+    $encoding = New-Object Text.UTF8Encoding($false)
+    try {
+        [IO.File]::WriteAllText($temporaryPath, ($settings | ConvertTo-Json -Depth 100), $encoding)
+        if (Test-Path -LiteralPath $settingsPath -PathType Leaf) {
+            try {
+                [IO.File]::Replace($temporaryPath, $settingsPath, $backupPath, $true)
+                if (Test-Path -LiteralPath $backupPath) { Remove-Item -LiteralPath $backupPath -Force }
+            }
+            catch {
+                Move-Item -LiteralPath $temporaryPath -Destination $settingsPath -Force
+            }
+        }
+        else {
+            [IO.File]::Move($temporaryPath, $settingsPath)
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Force }
+        if (Test-Path -LiteralPath $backupPath) { Remove-Item -LiteralPath $backupPath -Force }
+    }
+}
+
 function Write-LogLine {
     param([string]$Line, [string]$Stream = 'stdout')
     $stamp = [DateTime]::UtcNow.ToString('o')
@@ -133,6 +193,8 @@ if (-not (Test-Path -LiteralPath $logDirectory)) { $null = New-Item -ItemType Di
 $logEncoding = New-Object Text.UTF8Encoding($false)
 $script:LogWriter = New-Object IO.StreamWriter($LogPath, $true, $logEncoding)
 $script:LogWriter.AutoFlush = $true
+Ensure-SdwUiSettings -UserDataRoot $userDataRoot
+Write-LogLine -Stream 'supervisor' -Line 'Ensured checkpoint and VAE selectors are visible in A1111 quick settings.'
 
 $supervisorProcess = Get-Process -Id $PID
 $supervisorStartedAtUtc = $supervisorProcess.StartTime.ToUniversalTime().ToString('o')

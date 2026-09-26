@@ -469,9 +469,9 @@ catch {
     Add-SdwStatusCaption '整体状态' 0 0
     Add-SdwStatusCaption 'Profile' 2 0
     Add-SdwStatusCaption 'GPU' 0 1
-    Add-SdwStatusCaption '数据目录' 0 2
-    Add-SdwStatusCaption '模型数量' 0 3
-    Add-SdwStatusCaption '服务地址' 2 3
+    Add-SdwStatusCaption '存储位置' 0 2
+    Add-SdwStatusCaption '已安装模型' 0 3
+    Add-SdwStatusCaption '生成界面' 2 3
 
     $stateLabel = New-SdwValueLabel '正在检查…'
     $stateLabel.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9, [System.Drawing.FontStyle]::Bold)
@@ -508,18 +508,18 @@ catch {
     $actionFlow.FlowDirection = [System.Windows.Forms.FlowDirection]::LeftToRight
     $actionGroup.Controls.Add($actionFlow)
 
-    $setupButton = New-SdwButton '一键安装 / 修复' 154 ([System.Drawing.Color]::FromArgb(235, 242, 255))
-    $startButton = New-SdwButton '启动' 94 ([System.Drawing.Color]::FromArgb(220, 252, 231))
-    $stopButton = New-SdwButton '停止' 94 ([System.Drawing.Color]::FromArgb(254, 226, 226))
-    $openUiButton = New-SdwButton '打开 WebUI' 126
-    $importButton = New-SdwButton '导入 .safetensors' 166
-    $downloadButton = New-SdwButton '下载入门模型' 154
-    $doctorButton = New-SdwButton '诊断' 94
-    $settingsButton = New-SdwButton '选择数据目录' 150
-    $openDataButton = New-SdwButton '打开数据目录' 132
-    $openModelsButton = New-SdwButton '打开模型目录' 132
-    $openOutputsButton = New-SdwButton '打开输出目录' 132
-    $openLogsButton = New-SdwButton '打开日志' 112
+    $setupButton = New-SdwButton '准备 / 修复引擎' 154 ([System.Drawing.Color]::FromArgb(235, 242, 255))
+    $startButton = New-SdwButton '启动引擎' 104 ([System.Drawing.Color]::FromArgb(220, 252, 231))
+    $stopButton = New-SdwButton '停止引擎' 104 ([System.Drawing.Color]::FromArgb(254, 226, 226))
+    $openUiButton = New-SdwButton '打开生成界面' 146 ([System.Drawing.Color]::FromArgb(219, 234, 254))
+    $importButton = New-SdwButton '添加模型' 112
+    $downloadButton = New-SdwButton '下载通用基础模型' 166
+    $doctorButton = New-SdwButton '检查问题' 104
+    $settingsButton = New-SdwButton '更改存储位置' 142
+    $openDataButton = New-SdwButton '打开存储位置' 132
+    $openModelsButton = New-SdwButton '模型管理' 112
+    $openOutputsButton = New-SdwButton '输出管理' 112
+    $openLogsButton = New-SdwButton '查看运行日志' 132
     $actionFlow.Controls.AddRange(@(
         $setupButton, $startButton, $stopButton, $openUiButton, $importButton,
         $downloadButton, $doctorButton, $settingsButton, $openDataButton,
@@ -546,8 +546,8 @@ catch {
     if (-not [string]::IsNullOrWhiteSpace($script:LauncherDataRoot)) {
         $dataRootLabel.Text = $script:LauncherDataRoot
     }
-    $toolTip.SetToolTip($dataRootLabel, '模型、输出和运行数据保存在此目录')
-    $toolTip.SetToolTip($urlLink, '通过统一 CLI 打开本地 WebUI')
+    $toolTip.SetToolTip($dataRootLabel, '引擎、模型和生成结果统一保存在这里')
+    $toolTip.SetToolTip($urlLink, '打开本地图片生成界面')
 
     function Get-SdwNormalizedState {
         param([AllowNull()][object]$Summary)
@@ -596,8 +596,8 @@ catch {
         $startButton.Enabled = $true
         $stopButton.Enabled = $true
         $openUiButton.Enabled = $true
-        $importButton.Enabled = (-not $busy -and $stopped)
-        $downloadButton.Enabled = (-not $busy -and $stopped)
+        $importButton.Enabled = $true
+        $downloadButton.Enabled = $true
         $doctorButton.Enabled = -not $busy
         $settingsButton.Enabled = $true
         $openDataButton.Enabled = -not $busy
@@ -620,7 +620,7 @@ catch {
         else {
             $startTip = if ($installed -and $hasModel -and $stopped) { '启动本地 Stable Diffusion 服务' } else { '点击查看当前无法启动的原因' }
             $stopTip = if ($running -or $state -eq 'starting') { '停止由本工作台启动的服务' } else { '当前没有正在运行的服务' }
-            $openUiTip = if ($healthy) { '在浏览器中打开 WebUI' } else { '点击后检查环境；就绪时将自动启动并打开 WebUI' }
+            $openUiTip = if ($healthy) { '在浏览器中打开图片生成界面' } else { '点击后检查环境；就绪时将自动启动并打开生成界面' }
             $toolTip.SetToolTip($startButton, $startTip)
             $toolTip.SetToolTip($stopButton, $stopTip)
             $toolTip.SetToolTip($openUiButton, $openUiTip)
@@ -784,7 +784,7 @@ catch {
         if (($Command -eq 'setup' -or $Command -eq 'repair') -and
             (-not $effectiveParameters.Contains('DataRoot') -or
              [string]::IsNullOrWhiteSpace([string]$effectiveParameters['DataRoot']))) {
-            throw '安装或修复前必须先确认数据目录。请点击“选择数据目录”。'
+            throw '准备或修复引擎前必须先确认存储位置。请点击“更改存储位置”。'
         }
         $tokens = Get-SdwValidatedTokens -Command $Command -Parameters $effectiveParameters
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -986,7 +986,7 @@ catch {
             if ($command -eq 'configure') {
                 try {
                     Save-SdwLauncherSettings -DataRoot ([string]$completedParameters['DataRoot'])
-                    Add-SdwLogLine "启动器已记住数据目录：$($script:LauncherDataRoot)"
+                    Add-SdwLogLine "启动器已记住存储位置：$($script:LauncherDataRoot)"
                 }
                 catch {
                     Add-SdwLogLine "设置已写入数据目录，但启动器无法记住该目录：$($_.Exception.Message)"
@@ -1004,7 +1004,7 @@ catch {
             if ($command -eq 'start') {
                 $stateLabel.Text = '正在启动 / 等待健康检查'
                 $stateLabel.ForeColor = [System.Drawing.Color]::FromArgb(180, 83, 9)
-                $operationLabel.Text = '启动命令已完成，正在确认 WebUI 健康状态…'
+                $operationLabel.Text = '启动命令已完成，正在确认生成界面状态…'
             }
             else {
                 $operationLabel.Text = "$displayName 已完成"
@@ -1018,7 +1018,7 @@ catch {
             $operationLabel.Text = "$displayName 失败"
             [void][System.Windows.Forms.MessageBox]::Show(
                 $form,
-                ('{0} 执行失败（退出码 {1}）。请查看下方日志，或运行“诊断”。' -f $displayName, $exitCode),
+                ('{0} 执行失败（退出码 {1}）。请查看下方日志，或点击“检查问题”。' -f $displayName, $exitCode),
                 '命令执行失败',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error
@@ -1027,7 +1027,7 @@ catch {
         Update-SdwButtons
         if ($exitCode -eq 0 -and $command -eq 'start' -and $script:OpenUiAfterStart) {
             $script:OpenUiAfterStart = $false
-            Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开 WebUI'
+            Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开生成界面'
             return
         }
         Start-SdwStatusRefresh
@@ -1040,7 +1040,7 @@ catch {
         $state = Get-SdwNormalizedState $script:CurrentSummary
         if ($running -or $state -eq 'starting') {
             [void][System.Windows.Forms.MessageBox]::Show(
-                $form, '请先停止 Stable Diffusion，再修改数据目录或端口。', '设置',
+                $form, '请先停止生成引擎，再修改存储位置或端口。', '设置',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Information
             )
@@ -1048,7 +1048,7 @@ catch {
         }
 
         $dialog = New-Object System.Windows.Forms.Form
-        $dialog.Text = if ($InstallMode) { '确认 Stable Diffusion 安装位置' } else { '数据目录与端口' }
+        $dialog.Text = if ($InstallMode) { '确认本地引擎存储位置' } else { '存储位置与端口' }
         $dialog.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterParent
         $dialog.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
         $dialog.MaximizeBox = $false
@@ -1057,7 +1057,7 @@ catch {
         $dialog.Font = $form.Font
 
         $dataCaption = New-Object System.Windows.Forms.Label
-        $dataCaption.Text = if ($InstallMode) { '安装数据目录（运行时、模型、输出）' } else { '数据目录' }
+        $dataCaption.Text = if ($InstallMode) { '存储位置（引擎、模型和生成结果）' } else { '存储位置' }
         $dataCaption.Location = New-Object System.Drawing.Point(20, 22)
         $dataCaption.AutoSize = $true
         $dataText = New-Object System.Windows.Forms.TextBox
@@ -1103,7 +1103,7 @@ catch {
 
         $browseButton.Add_Click({
             $folderDialog = New-Object System.Windows.Forms.FolderBrowserDialog
-            $folderDialog.Description = '选择 Stable Diffusion 数据目录'
+            $folderDialog.Description = '选择 Stable Diffusion 存储位置'
             $folderDialog.ShowNewFolderButton = $true
             if (Test-Path -LiteralPath $dataText.Text -PathType Container) {
                 $folderDialog.SelectedPath = $dataText.Text
@@ -1123,7 +1123,7 @@ catch {
         if ($dialog.ShowDialog($form) -eq [System.Windows.Forms.DialogResult]::OK) {
             try {
                 if ([string]::IsNullOrWhiteSpace($dataText.Text) -or -not [System.IO.Path]::IsPathRooted($dataText.Text)) {
-                    throw '请选择一个绝对路径作为数据目录。'
+                    throw '请选择一个绝对路径作为存储位置。'
                 }
                 $selectedRoot = [System.IO.Path]::GetFullPath($dataText.Text)
                 if (Test-SdwLauncherPathEncrypted -Path $selectedRoot) {
@@ -1142,7 +1142,7 @@ catch {
                         Save-SdwLauncherSettings -DataRoot $selectedRoot
                         $dataRootLabel.Text = $selectedRoot
                         $toolTip.SetToolTip($dataRootLabel, $selectedRoot)
-                        Add-SdwLogLine "已确认安装数据目录：$selectedRoot"
+                        Add-SdwLogLine "已确认引擎存储位置：$selectedRoot"
                         Queue-SdwAction -Command 'setup' -Parameters ([ordered]@{
                             DataRoot = $selectedRoot
                         }) -DisplayName '安装 Stable Diffusion'
@@ -1247,15 +1247,15 @@ catch {
         $running = ConvertTo-SdwBoolean (Get-SdwObjectValue $script:CurrentSummary @('running') $false)
         $dataRoot = Get-SdwDisplayedDataRoot
         if ($running -or $state -eq 'starting') {
-            Show-SdwLifecycleNotice -Title '服务已经启动' -Message 'Stable Diffusion 已经在运行或正在启动。可以点击“打开 WebUI”。'
+            Show-SdwLifecycleNotice -Title '服务已经启动' -Message 'Stable Diffusion 已经在运行或正在启动。可以点击“打开生成界面”。'
             return
         }
         if (-not $installed) {
-            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前数据目录尚未准备运行环境：`r`n$dataRoot`r`n`r`n请先点击“一键安装 / 修复”。"
+            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置尚未准备运行环境：`r`n$dataRoot`r`n`r`n请先点击“准备 / 修复引擎”。"
             return
         }
         if (-not $hasModel) {
-            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前数据目录没有 .safetensors 模型：`r`n$dataRoot`r`n`r`n请点击“导入 .safetensors”或“下载入门模型”。"
+            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置没有 .safetensors 模型：`r`n$dataRoot`r`n`r`n请点击“添加模型”或“下载通用基础模型”。"
             return
         }
         Queue-SdwAction -Command 'start' -Parameters ([ordered]@{}) -DisplayName '启动 Stable Diffusion'
@@ -1293,23 +1293,23 @@ catch {
         $url = [string](Get-SdwObjectValue $script:CurrentSummary @('url', 'webUiUrl') '')
         $dataRoot = Get-SdwDisplayedDataRoot
         if ($healthy -and (Test-SdwLoopbackUrl $url)) {
-            Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开 WebUI'
+            Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开生成界面'
             return
         }
         if ($running -or $state -eq 'starting') {
-            Show-SdwLifecycleNotice -Title 'WebUI 正在启动' -Message '后端进程已经启动，但健康检查尚未通过。请稍候再次点击；如果长时间没有就绪，请查看下方日志。'
+            Show-SdwLifecycleNotice -Title '生成界面正在启动' -Message '生成引擎已经启动，但健康检查尚未通过。请稍候再次点击；如果长时间没有就绪，请查看下方日志。'
             return
         }
         if (-not $installed) {
-            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前数据目录尚未准备运行环境：`r`n$dataRoot`r`n`r`n请先点击“一键安装 / 修复”。"
+            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置尚未准备运行环境：`r`n$dataRoot`r`n`r`n请先点击“准备 / 修复引擎”。"
             return
         }
         if (-not $hasModel) {
-            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前数据目录没有 .safetensors 模型：`r`n$dataRoot`r`n`r`n请点击“导入 .safetensors”或“下载入门模型”。"
+            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置没有 .safetensors 模型：`r`n$dataRoot`r`n`r`n请点击“添加模型”或“下载通用基础模型”。"
             return
         }
         $script:OpenUiAfterStart = $true
-        Queue-SdwAction -Command 'start' -Parameters ([ordered]@{}) -DisplayName '启动并打开 WebUI'
+        Queue-SdwAction -Command 'start' -Parameters ([ordered]@{}) -DisplayName '启动并打开生成界面'
     }
 
     $setupButton.Add_Click({
@@ -1324,13 +1324,20 @@ catch {
     })
     $startButton.Add_Click({ Invoke-SdwStartFromUi })
     $stopButton.Add_Click({ Invoke-SdwStopFromUi })
-    $doctorButton.Add_Click({ Queue-SdwAction -Command 'doctor' -Parameters ([ordered]@{}) -DisplayName '运行诊断' })
+    $doctorButton.Add_Click({ Queue-SdwAction -Command 'doctor' -Parameters ([ordered]@{}) -DisplayName '检查运行问题' })
     $openUiButton.Add_Click({ Invoke-SdwOpenUiFromUi })
-    $urlLink.Add_LinkClicked({ Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开 WebUI' })
-    $openDataButton.Add_Click({ Queue-SdwAction -Command 'open-data' -Parameters ([ordered]@{}) -DisplayName '打开数据目录' })
-    $openModelsButton.Add_Click({ Queue-SdwAction -Command 'open-models' -Parameters ([ordered]@{}) -DisplayName '打开模型目录' })
-    $openOutputsButton.Add_Click({ Queue-SdwAction -Command 'open-outputs' -Parameters ([ordered]@{}) -DisplayName '打开输出目录' })
-    $openLogsButton.Add_Click({ Queue-SdwAction -Command 'logs' -Parameters ([ordered]@{}) -DisplayName '打开日志' })
+    $urlLink.Add_LinkClicked({ Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开生成界面' })
+    $openDataButton.Add_Click({ Queue-SdwAction -Command 'open-data' -Parameters ([ordered]@{}) -DisplayName '打开存储位置' })
+    $openModelsButton.Add_Click({
+        if (Test-SdwActionBusy) {
+            Show-SdwBusyNotice
+            return
+        }
+        Show-SdwLifecycleNotice -Title '模型管理' -Message "即将打开模型文件夹。`r`n`r`n• Checkpoint 主模型放入 Stable-diffusion`r`n• VAE 放入 VAE`r`n• LoRA 放入 Lora`r`n`r`n支持的模型文件优先使用 .safetensors。生成引擎正在运行时，新文件可能需要在生成界面点击刷新，或重新启动引擎后出现。"
+        Queue-SdwAction -Command 'open-models' -Parameters ([ordered]@{}) -DisplayName '打开模型管理'
+    })
+    $openOutputsButton.Add_Click({ Queue-SdwAction -Command 'open-outputs' -Parameters ([ordered]@{}) -DisplayName '打开输出管理' })
+    $openLogsButton.Add_Click({ Queue-SdwAction -Command 'logs' -Parameters ([ordered]@{}) -DisplayName '查看运行日志' })
     $settingsButton.Add_Click({
         if (Test-SdwActionBusy) {
             Show-SdwBusyNotice
@@ -1341,8 +1348,12 @@ catch {
     })
 
     $importButton.Add_Click({
+        if (Test-SdwActionBusy) {
+            Show-SdwBusyNotice
+            return
+        }
         $fileDialog = New-Object System.Windows.Forms.OpenFileDialog
-        $fileDialog.Title = '选择 Stable Diffusion 模型'
+        $fileDialog.Title = '添加 Stable Diffusion 模型'
         $fileDialog.Filter = 'SafeTensors 模型 (*.safetensors)|*.safetensors'
         $fileDialog.CheckFileExists = $true
         $fileDialog.Multiselect = $false
@@ -1366,6 +1377,10 @@ catch {
     })
 
     $downloadButton.Add_Click({
+        if (Test-SdwActionBusy) {
+            Show-SdwBusyNotice
+            return
+        }
         try {
             $asset = Get-SdwStarterAssetNotice
         }
@@ -1378,7 +1393,7 @@ catch {
             return
         }
         $confirmation = @"
-即将下载入门模型：$($asset.DisplayName)
+即将下载通用基础模型：$($asset.DisplayName)
 下载大小：约 $($asset.SizeText)
 
 来源：
@@ -1401,7 +1416,7 @@ $($asset.LicenseUrl)
             [System.Windows.Forms.MessageBoxDefaultButton]::Button2
         )
         if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
-            Queue-SdwAction -Command 'download-starter-model' -Parameters ([ordered]@{ AcceptLicense = $true }) -DisplayName "下载入门模型（$($asset.SizeText)）"
+            Queue-SdwAction -Command 'download-starter-model' -Parameters ([ordered]@{ AcceptLicense = $true }) -DisplayName "下载通用基础模型（$($asset.SizeText)）"
         }
     })
 
@@ -1429,7 +1444,7 @@ $($asset.LicenseUrl)
     $form.Add_Shown({
         Add-SdwLogLine '启动器已就绪。所有安装和运行命令将通过 scripts\sdw.ps1 执行。'
         if (-not [string]::IsNullOrWhiteSpace($script:LauncherDataRoot)) {
-            Add-SdwLogLine "已加载数据目录：$script:LauncherDataRoot"
+            Add-SdwLogLine "已加载存储位置：$script:LauncherDataRoot"
         }
         if (-not [string]::IsNullOrWhiteSpace($script:LauncherSettingsWarning)) {
             Add-SdwLogLine $script:LauncherSettingsWarning
