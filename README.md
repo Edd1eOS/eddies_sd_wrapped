@@ -14,11 +14,12 @@
 
 1. 克隆或下载本仓库。
 2. 双击根目录的 **`Start Stable Diffusion.cmd`**。
-3. 点击“一键安装/修复”，在弹出的窗口中确认数据目录；运行时、模型和输出均放在该目录，不会写入 Git 仓库。
-4. 导入现有 `.safetensors`，或明确接受模型许可证后下载约 4.27 GB 的入门模型。
-5. 点击“启动”；状态显示运行中后点击“打开 WebUI”。
+3. 点击“选择数据目录”可随时指定存储位置；未选择时默认使用仓库旁的 `data/`。该目录已被 Git 忽略，不会提交模型或用户产物。
+4. 点击“一键安装/修复”准备本地引擎。
+5. 导入现有 `.safetensors`，或明确接受模型许可证后下载约 4.27 GB 的入门模型。
+6. 点击“打开 WebUI”；如果服务尚未运行，Launcher 会自动启动后再打开浏览器。
 
-启动器本身不要求预装 Python、Git、Node.js 或 .NET SDK，也不会改写系统 Python、IDE 解释器或全局 `PATH`。首次 setup 会下载 A1111 官方便携引导包、固定 commit 的上游源码和 PyTorch 等依赖，因此需要网络、足够磁盘空间和一定等待时间。若默认 `%LOCALAPPDATA%` 继承了 Windows EFS 加密，请先在“设置”中选择一个未加密的本地数据目录。详细步骤与限制见 [`docs/WINDOWS_QUICKSTART.md`](docs/WINDOWS_QUICKSTART.md)，环境与分发约束见 [`docs/ENVIRONMENT_ISOLATION.md`](docs/ENVIRONMENT_ISOLATION.md)，RTX 5070 Laptop 的完整安装/生成/停止结果见 [`docs/VALIDATION.md`](docs/VALIDATION.md)。
+启动器本身不要求预装 Python、Git、Node.js 或 .NET SDK，也不会改写系统 Python、IDE 解释器或全局 `PATH`。首次 setup 会下载 A1111 官方便携引导包、固定 commit 的上游源码和 PyTorch 等依赖，因此需要网络、足够磁盘空间和一定等待时间。默认数据目录是启动器仓库中的 `data/`；也可以随时通过“选择数据目录”改到其他未加密本地路径。详细步骤与限制见 [`docs/WINDOWS_QUICKSTART.md`](docs/WINDOWS_QUICKSTART.md)，环境与分发约束见 [`docs/ENVIRONMENT_ISOLATION.md`](docs/ENVIRONMENT_ISOLATION.md)，RTX 5070 Laptop 的完整安装/生成/停止结果见 [`docs/VALIDATION.md`](docs/VALIDATION.md)。
 
 ## 目标使用体验
 
@@ -30,7 +31,7 @@
 - `doctor`：诊断系统、运行时、GPU、端口、目录和依赖
 - `import-model` / `download-starter-model`：登记生成所需的安全权重
 - `status/logs/open-ui/open-data/open-models/open-outputs`：日常运行管理
-- `configure`：在停止状态修改仓库外数据目录或本地端口
+- `configure`：在停止状态修改数据目录或本地端口
 
 例如：
 

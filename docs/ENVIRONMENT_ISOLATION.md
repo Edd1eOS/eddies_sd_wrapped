@@ -10,12 +10,12 @@ AUTOMATIC1111 及其 PyTorch 组合对 Python、CUDA 和打包工具版本有明
 
 1. 用户双击仓库根目录的 `Start Stable Diffusion.cmd`。
 2. 入口只调用 Windows 自带的 Windows PowerShell 5.1，不调用裸 `python`、`pip` 或 `git` 命令。
-3. Launcher 让用户选择仓库外的数据目录；默认目录不可用（例如继承 EFS 加密）时会给出可操作提示。
+3. Launcher 让用户自由选择数据目录；未选择时使用启动器仓库中的 `data/`（已被 Git 忽略）。目录不可用或继承 EFS 加密时会给出可操作提示。
 4. `setup` 下载 `configs/upstream-lock.json` 中固定大小和 SHA-256 的 A1111 便携引导包，只提取其中的 Python/Git 运行时。
 5. 工作台检出 Profile 锁定的 A1111 commit，并在该私有运行时中安装锁定的引导工具链、PyTorch 与上游依赖。
 6. 启动时只在 A1111 子进程环境中设置 `PYTHON`、`GIT` 和临时 `PATH`；父进程、用户环境变量和系统环境变量保持不变。
 
-这里使用的是“一套应用私有的便携 Python”，不是供其他项目复用的通用虚拟环境。运行时位于所选数据目录的 `runtime/versions/`，模型、输出、日志和用户配置也都位于仓库外。
+这里使用的是“一套应用私有的便携 Python”，不是供其他项目复用的通用虚拟环境。运行时位于所选数据目录的 `runtime/versions/`；模型、输出、日志和用户配置也都位于该数据目录，且不会被 Git 跟踪。
 
 ## 用户需要配置什么
 

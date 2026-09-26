@@ -180,6 +180,14 @@ Assert-SdwTest ($launcherSource -match 'Show-SdwSettingsDialog\s+-InstallMode' -
 Assert-SdwTest ($launcherSource -match 'Test-SdwLauncherPathEncrypted' -and
     $launcherSource -match 'Windows EFS') 'launcher rejects an EFS-encrypted install destination before setup'
 Assert-SdwTest ($launcherSource -match '\$actionGroup\.Text\s*=\s*if\s*\(\$busy\)') 'launcher visibly explains the locked action state during a long-running task'
+Assert-SdwTest ($launcherSource -match 'Join-Path\s+\$script:RepositoryRoot\s+''data''' -and
+    $launcherSource -match '\$settingsButton\s*=\s*New-SdwButton' -and
+    $launcherSource -match '\$settingsButton\.Add_Click') 'launcher defaults to a portable git-ignored data directory and exposes a path picker'
+Assert-SdwTest ($launcherSource -match '\$startButton\.Enabled\s*=\s*\$true' -and
+    $launcherSource -match '\$stopButton\.Enabled\s*=\s*\$true' -and
+    $launcherSource -match '\$openUiButton\.Enabled\s*=\s*\$true') 'primary lifecycle controls remain clickable and explain unmet prerequisites'
+Assert-SdwTest ($launcherSource -match 'OpenUiAfterStart' -and
+    $launcherSource -match "(?s)function\s+Invoke-SdwOpenUiFromUi.*?Queue-SdwAction\s+-Command\s+'start'") 'open WebUI can start a ready backend before opening the browser'
 
 $bootstrapSources = @(
     (Get-Content -LiteralPath (Join-Path $repositoryRoot 'Start Stable Diffusion.cmd') -Raw -Encoding UTF8),

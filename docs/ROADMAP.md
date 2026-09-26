@@ -19,7 +19,7 @@
 - 实现图形 Launcher、可靠的 `start`/`stop`、健康检查和日志。
 - 实现只读优先、输出可操作建议的 `doctor`。
 - 实现固定标准/Blackwell Profile、模型导入和带许可证确认的入门模型下载。
-- 将运行时、模型、配置、输出和日志保持在仓库外。
+- 将运行时、模型、配置、输出和日志保持在用户选择且不被 Git 跟踪的数据目录；便携默认使用仓库中的 `data/`。
 - 用无 GPU/无大下载的单元测试覆盖配置、Profile、命令、环境隔离与进程所有权；RTX 5070 Laptop 的 setup/import/start/API txt2img/stop 实机闭环已完成，标准 NVIDIA Profile 的同等矩阵后续补充。
 - 多实例、版本更新/回滚和完整资产图库后置。
 - 当前版本不实现 Training Studio；等生成闭环验收后再恢复该路线。
