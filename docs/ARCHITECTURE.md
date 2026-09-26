@@ -6,20 +6,22 @@ Phase 1 设计基线。上游已指定为 AUTOMATIC1111 Stable Diffusion WebUI�
 
 ## 设计目标
 
-工作台负责安装编排、生命周期管理、健康检查、配置归一化、资产管理和用户入口；实际模型推理由固定版本的 AUTOMATIC1111 WebUI 负责。Agent 通过独立 MCP 服务调用本机 REST API，不把 MCP 实现成上游扩展。
+工作台负责安装编排、生命周期管理、健康检查、配置归一化、资产管理、训练编排和用户入口；实际模型推理由固定版本的 AUTOMATIC1111 WebUI 负责。LoRA 训练由独立、固定版本的训练后端负责，不与 A1111 共用虚拟环境。Agent 通过独立 MCP 服务调用本地控制面，不把 MCP 实现成上游扩展。
 
 ```text
-Launcher / Asset Manager
+Launcher / Asset Manager / Training Studio
         ├─ 环境、版本、Profile、进程、日志、更新/回滚
-        └─ 模型、VAE、LoRA、Embedding、Upscaler、输出图库
-                         |
-       固定版本 AUTOMATIC1111 独立进程
-                         |
-                localhost REST API
-                         |
-                独立 MCP Server
-                         |
-              Codex / OpenClaw / Agent
+        ├─ 数据集、模型、VAE、LoRA、Embedding、输出图库
+        └─ GPU 资源协调、任务队列、产物登记与对比评测
+                    |                         |
+     固定版本 A1111 独立进程       固定版本训练后端独立进程
+       原生生成 UI + REST API       Quick LoRA / Expert config
+                    |                         |
+                    └──── Local Control Plane ┘
+                                  |
+                           独立 MCP Server
+                                  |
+                        Codex / OpenClaw / Agent
 ```
 
 ## 组件边界
@@ -29,13 +31,25 @@ Launcher / Asset Manager
 - **上游适配层**：调用官方启动脚本，封装启动参数、健康检查和运行时 `/docs` 能力发现。
 - **资产注册表**：使用稳定 asset ID、hash、来源、许可证、兼容性和预览管理权重与产物。
 - **任务队列**：序列化单 GPU 任务，隔离任务取消与输出，避免一个客户端中断另一个客户端。
-- **MCP 服务**：暴露高层生成任务，不开放扩展安装、任意下载、训练或 server-kill。
+- **训练编排器**：把数据集版本、训练预设和基础模型解析为可复现计划；默认使用 LoRA，保存配置、日志、采样和 provenance。
+- **GPU 资源协调器**：训练与生成默认互斥；只有经过硬件验证的 Profile 才允许并行。
+- **MCP 服务**：默认暴露高层生成任务；训练只提供只读/计划工具，实际提交须启用训练权限并经过显式确认。
 - **用户数据目录**：模型、输出、缓存与代码隔离，默认不进入 Git。
 - **验证层**：对配置、适配器与关键生命周期行为进行自动化测试。
 
 ## 配置优先级
 
 预期顺序为：命令行参数 > 本地 `.env` > 可提交配置 > 安全默认值。密钥不得出现在日志或诊断报告中。
+
+## 训练隔离与资产流
+
+1. 数据集导入用户数据目录，生成不可变 manifest、内容 hash、caption 状态和授权/来源记录。
+2. 训练预检检查图片可读性、重复项、尺寸/分桶、caption、磁盘和估算资源，不在预检阶段执行训练。
+3. 用户确认计划后，训练后端在独立环境中运行；每个 job 固定基础模型 hash、后端版本、完整配置和随机种子。
+4. 任务期间采样图进入 job 目录，最终 LoRA 先校验为安全权重格式，再登记到资产注册表。
+5. A1111 通过受控目录映射读取已登记 LoRA；失败或未登记产物不会自动污染可用资产库。
+
+首选训练底座为由 kohya-ss 维护的第三方候选 [`kohya-ss/sd-scripts`](https://github.com/kohya-ss/sd-scripts)。[`bmaltais/kohya_ss`](https://github.com/bmaltais/kohya_ss) 作为待验证的专家 GUI 候选，而不是核心数据模型或唯一入口。最终固定 commit 前必须完成许可证、Windows 安装、显卡矩阵和最小训练烟测。
 
 ## 分发原则
 

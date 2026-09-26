@@ -30,9 +30,11 @@ data/
 generated/
 input/
 inputs/
+datasets/
 logs/
 outputs/
 runtime/
+training-runs/
 .runtime/
 tmp/
 *.log
