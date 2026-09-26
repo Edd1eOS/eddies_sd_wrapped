@@ -26,9 +26,14 @@ Thumbs.db
 # 运行产物
 artifacts/
 cache/
+data/
 generated/
+input/
+inputs/
 logs/
 outputs/
+runtime/
+.runtime/
 tmp/
 *.log
 
