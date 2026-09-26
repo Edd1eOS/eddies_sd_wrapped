@@ -10,14 +10,14 @@
 - 上游采用 AGPL-3.0；模型和扩展有独立许可证。
 - 正式发布节奏较慢，master/dev 长期分叉，默认不得自动 `git pull`。
 
-## 版本通道候选
+## 已锁定的版本通道
 
-| 通道 | 候选版本 | 场景 | 进入默认前的验证 |
+| 通道 | 精确版本 | 场景 | 当前验证状态 |
 | --- | --- | --- | --- |
-| Stable | `v1.10.1` / `82a973c...` | 已知兼容硬件 | OS、GPU、驱动、PyTorch、API 与扩展基线 |
-| Blackwell/Experimental | 固定且测试通过的 dev commit | RTX 50 系/PyTorch 2.7 | 独立环境、完整烟测、明确实验提示与回滚 |
+| Stable | `v1.10.1` / `82a973c04367123ae98bd9abdf80d9eda9b910e2` | RTX 40 及更早的 NVIDIA 硬件 | lock、便携引导、安全启动参数与 CLI 测试已完成；生成烟测按具体硬件持续补充 |
+| Blackwell/Experimental | `1937682a20f7f0442311a1ede68f9f0cb480163b` | RTX 50 系 + PyTorch 2.7/cu128 | 已在 RTX 5070 Laptop 上完成隔离安装、CUDA、API 生成和停止闭环；见 [`VALIDATION.md`](VALIDATION.md) |
 
-这些是调研候选，不是已经通过测试的 operational lock。
+两个通道都是 operational lock，不会在 setup 时自动跟踪 master/dev。Blackwell 通道仍标记为实验；“已锁定”不等于对所有驱动与 RTX 50 型号做出兼容性承诺。
 
 ## 必评维度
 

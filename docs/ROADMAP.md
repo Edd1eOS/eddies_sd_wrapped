@@ -6,35 +6,36 @@
 - 记录 AUTOMATIC1111 官方仓库、AGPL 许可证、Stable/Experimental 通道与 API 边界。
 - 暂不承诺可运行的推理能力。
 
-## Phase 1：上游版本与硬件验证（当前）
+## Phase 1：上游生成基线（已完成）
 
 - 验证 v1.10.1/固定 master commit 的支持矩阵与正式通道。
 - 为 RTX 50/Blackwell 验证固定 dev commit + PyTorch 2.7 实验通道。
-- 复现 REST API、数据目录重定向、模型切换和生成烟测。
-- 固定 `sd-scripts` 训练后端候选，验证 Windows 安装、LoRA 最小训练、显存占用和产物加载。
-- 对 `kohya_ss` 专家 GUI 做版本、许可证和打包边界验证。
-- 核对 WD14 ONNX caption 代码、模型权重、数据来源与许可证；未通过前不作为默认下载项。
-- 完成 AGPL、模型与扩展许可证策略。
+- 复现 REST API、数据目录重定向、模型导入和生成烟测。
+- 记录 A1111、便携运行时、PyTorch 与入门模型的来源和许可证；发布前仍需正式完成递归许可/SBOM 审查。
 
-## Phase 2：一键生命周期
+## Phase 2：Windows Launcher MVP（当前）
 
-- 实现可重复的 `setup`。
-- 实现可靠的 `start` 与 `stop`。
+- 实现可重复的便携 `setup`，不依赖系统 Python/Git。
+- 实现图形 Launcher、可靠的 `start`/`stop`、健康检查和日志。
 - 实现只读优先、输出可操作建议的 `doctor`。
-- 实现保留配置并可回滚的 `update`。
-- 实现 Profile、多实例、资产注册表与输出图库。
-- 实现 Training Studio：数据集登记/预检、Quick LoRA 向导、训练计划、GPU 互斥队列、日志和取消。
-- 训练完成后登记 LoRA，并在 A1111 原生 WebUI 中刷新和验证加载。
-- 覆盖 Windows，并明确 macOS/Linux 支持范围。
+- 实现固定标准/Blackwell Profile、模型导入和带许可证确认的入门模型下载。
+- 将运行时、模型、配置、输出和日志保持在仓库外。
+- 用无 GPU/无大下载的单元测试覆盖配置、Profile、命令、环境隔离与进程所有权；RTX 5070 Laptop 的 setup/import/start/API txt2img/stop 实机闭环已完成，标准 NVIDIA Profile 的同等矩阵后续补充。
+- 多实例、版本更新/回滚和完整资产图库后置。
+- 当前版本不实现 Training Studio；等生成闭环验收后再恢复该路线。
+- 覆盖 Windows NVIDIA，并明确 AMD/Intel/Linux/macOS 尚未验证。
 
-## Phase 3：可用产品层
+## Phase 3：产品化与扩展
 
 - 加入安全默认配置、预设和示例。
 - 完善失败恢复、升级、卸载与离线使用路径。
 - 建立端到端测试和发布包验证。
+- 实现版本化更新、原子切换、回滚、完整资产图库与多实例。
 - 加入独立 MCP 服务、异步任务队列、生成 provenance 和 Agent 有限调参循环。
 - 增加默认关闭的训练 MCP 权限；只读规划先行，提交与产物登记需要人工确认。
 - 建立固定 prompt/seed 的 LoRA 对比评测，限制自动实验次数与总预算。
+- 生成闭环稳定后再实现 Training Studio、LoRA 数据集和训练任务管理。
+- 训练阶段再固定 `sd-scripts` 后端，验证 Windows LoRA 最小训练、显存、产物加载，并复核 `kohya_ss` 与 WD14 caption 的版本、来源和许可证边界。
 
 ## Phase 4：分发与维护
 

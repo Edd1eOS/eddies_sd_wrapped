@@ -2,7 +2,7 @@
 
 ## 状态
 
-Phase 1 设计基线。上游已指定为 AUTOMATIC1111 Stable Diffusion WebUI；本文定义外置产品层边界，不代表精确版本和硬件矩阵已经验证。
+Phase 2 Windows Launcher MVP 已实现。当前可运行切片包含便携 setup、固定版本 Profile、图形 Launcher、模型导入/下载、进程与健康管理；训练、MCP、多实例和更新/回滚仍是目标架构，不是当前功能。
 
 ## 设计目标
 
@@ -26,7 +26,7 @@ Launcher / Asset Manager / Training Studio
 
 ## 组件边界
 
-- **命令入口**：为 Windows、macOS、Linux 提供一致语义。
+- **命令入口**：当前在 Windows 提供 GUI 与 CLI 的一致语义；macOS/Linux 是后续目标。
 - **核心编排**：解析配置、管理进程、记录可操作的错误信息。
 - **上游适配层**：调用官方启动脚本，封装启动参数、健康检查和运行时 `/docs` 能力发现。
 - **资产注册表**：使用稳定 asset ID、hash、来源、许可证、兼容性和预览管理权重与产物。
@@ -39,7 +39,7 @@ Launcher / Asset Manager / Training Studio
 
 ## 配置优先级
 
-预期顺序为：命令行参数 > 本地 `.env` > 可提交配置 > 安全默认值。密钥不得出现在日志或诊断报告中。
+当前优先级为：命令行参数 > Launcher 本地数据目录选择 > 用户数据目录中的配置 > 安全默认值。`.env` 与密钥配置尚未进入当前生成 MVP；未来密钥不得出现在日志或诊断报告中。
 
 ## 训练隔离与资产流
 

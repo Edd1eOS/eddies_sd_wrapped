@@ -1,5 +1,7 @@
 # Product Specification
 
+本文同时记录长期产品边界与当前可运行切片。当前交付物只是 **Windows Launcher MVP**：便携安装、固定 A1111、模型入口、启停、健康检查与日志。Training Studio 和 Agent/MCP 均已后置。
+
 ## 两个产品入口
 
 ### 1. Launcher 与资产中心
@@ -28,7 +30,24 @@ LoRA 训练不塞进 A1111 的 Python 环境。生成与训练后端各自固定
 - Codex/多模态 Agent 可查看生成图，再用固定 seed、变体、img2img 或 inpaint 有限次调整。
 - 每张图保存 prompt、negative prompt、seed、sampler、scheduler、CFG、尺寸、checkpoint hash、VAE、LoRA、扩展版本和 A1111 commit。
 
-## 数据布局
+## 当前 Windows MVP 数据布局
+
+```text
+<user-data>/
+  config.json
+  downloads/
+  runtime/{active.json,versions/,staging/}
+  state/runtime.json
+  logs/{setup.log,webui.log}
+  userdata/
+    models/{Stable-diffusion,Lora,VAE}/
+    embeddings/
+    outputs/
+```
+
+运行时、上游 checkout、模型、配置、日志和输出均位于 Git 仓库外。便携包与入门模型采用临时/下载文件、大小和 SHA-256 校验后原子移动。
+
+## 目标产品数据布局
 
 ```text
 <user-data>/
@@ -47,13 +66,13 @@ LoRA 训练不塞进 A1111 的 Python 环境。生成与训练后端各自固定
 
 这些目录都位于 Git 仓库外。下载采用临时文件、大小/hash 校验、原子移动和按 hash 去重。
 
-## MVP
+## 当前 MVP 验收边界
 
-- Windows Stable 通道一键 setup/start/stop/doctor/update/rollback。
-- 一个受验证的 text-to-image Profile 和一个 img2img/inpaint Profile。
-- 资产导入、扫描、hash、许可证确认和输出图库。
-- 引导式 LoRA 数据集预检、训练计划、单 GPU 队列和训练产物登记。
-- 独立 MCP 服务与有限的生成/查看/调整循环。
-- 默认 loopback、扩展白名单和资源上限。
+- Windows 10/11 x64 + NVIDIA 的一键 `setup/start/stop/status/doctor`。
+- 标准 NVIDIA 与 RTX 50/Blackwell 两个固定 Profile，不跟踪浮动分支。
+- `.safetensors` checkpoint 安全导入，以及带来源、许可和 hash 确认的可选入门模型。
+- A1111 原生 txt2img/img2img/inpaint UI 与 localhost REST API。
+- 默认 loopback、禁用额外扩展、禁用 share/远程监听，并且只停止通过所有权验证的进程。
+- 训练、MCP、update/rollback、多实例、扩展管理、AMD/Intel 与非 Windows 平台不在当前验收边界。
 
 DreamBooth、全量 checkpoint fine-tune 和无人值守自动反复训练不进入首个训练 MVP；这些模式显存、存储和误用风险更高，待硬件矩阵、评测基线和确认流程成熟后再开放。

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "starter-models",
+  "displayName": "Starter models",
+  "assets": [
+    {
+      "id": "stable-diffusion-v1-5-pruned-emaonly",
+      "displayName": "Stable Diffusion v1.5 (pruned, EMA only)",
+      "kind": "checkpoint",
+      "baseModel": "sd-1.5",
+      "fileName": "v1-5-pruned-emaonly.safetensors",
+      "destination": "models/Stable-diffusion",
+      "url": "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors",
+      "sourceRepository": "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "sourceNote": "Community mirror of the deprecated RunwayML repository; not affiliated with RunwayML. The locked file hash matches the original SD 1.5 checkpoint.",
+      "sizeBytes": 4265146304,
+      "sha256": "6ce0161689b3853acaa03779ec93eafe75a02f4ced659bee03f50797806fa2fa",
+      "license": {
+        "id": "creativeml-openrail-m",
+        "url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+        "requiresAcceptance": true
+      },
+      "redistribution": "download-from-source"
+    }
+  ]
+}

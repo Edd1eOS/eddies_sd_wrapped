@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "portable": {
+    "url": "https://github.com/AUTOMATIC1111/stable-diffusion-webui/releases/download/v1.0.0-pre/sd.webui.zip",
+    "sizeBytes": 52701884,
+    "sha256": "1384F18FDAA3C21BF7BC4976A6BF5A9672B71F25FA7CCF1AE6660AD461B1A42C"
+  },
+  "upstream": {
+    "repository": "https://github.com/AUTOMATIC1111/stable-diffusion-webui.git",
+    "profiles": {
+      "windows-nvidia-standard": {
+        "commit": "82a973c04367123ae98bd9abdf80d9eda9b910e2"
+      },
+      "windows-nvidia-blackwell": {
+        "commit": "1937682a20f7f0442311a1ede68f9f0cb480163b"
+      }
+    }
+  }
+}

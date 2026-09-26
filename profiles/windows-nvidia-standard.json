@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "windows-nvidia-standard",
+  "displayName": "Windows + NVIDIA (standard)",
+  "channel": "stable",
+  "upstreamCommit": "82a973c04367123ae98bd9abdf80d9eda9b910e2",
+  "torchCommand": "pip install torch==2.1.2 torchvision==0.16.2 --extra-index-url https://download.pytorch.org/whl/cu121",
+  "launchArgs": [],
+  "gpuMatch": {
+    "platform": "win32",
+    "vendor": "nvidia",
+    "includeNameRegex": "(?i)nvidia",
+    "excludeNameRegex": "(?i)(geforce\\s+rtx\\s+50\\d{2}|blackwell)",
+    "priority": 10
+  }
+}
