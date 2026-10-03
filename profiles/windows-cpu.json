@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "windows-cpu",
+  "displayName": "CPU (slow)",
+  "channel": "experimental",
+  "backend": "cpu",
+  "upstreamCommit": "82a973c04367123ae98bd9abdf80d9eda9b910e2",
+  "torchCommand": "pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu",
+  "launchArgs": ["--use-cpu", "all", "--skip-torch-cuda-test", "--precision", "full", "--no-half", "--no-half-vae"],
+  "note": "不使用显卡，速度很慢；用于小尺寸验证。不会自动下载模型，不改变现有显卡环境。"
+}

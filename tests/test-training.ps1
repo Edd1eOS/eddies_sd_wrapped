@@ -12,7 +12,7 @@ foreach($required in @('UV_PYTHON_INSTALL_DIR','UV_PROJECT_ENVIRONMENT','PYTHONN
 }
 if($source -match '(?im)^\s*setx\b|\[Environment\]::SetEnvironmentVariable\s*\('){throw 'Global environment mutation'}
 if(-not $hostSource.Contains('JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE')){throw 'Missing descendant cleanup'}
-$status=& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\sdw.ps1') -Command training-status
+$status=& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\sdw.ps1') -Command training-status -ProfileId nvidia
 if($LASTEXITCODE -ne 0){throw 'Training status failed'}
 $s=$status|ConvertFrom-Json
 if($s.root -ne (Join-Path $repo 'data\training') -or $s.url -ne 'http://127.0.0.1:7861'){throw 'Wrong training location'}

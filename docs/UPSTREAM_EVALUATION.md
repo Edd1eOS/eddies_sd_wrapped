@@ -4,6 +4,8 @@
 
 ## 已确认事实
 
+- 2026-10-03：经用户确认增加兼容后端，NVIDIA 继续使用原版。Intel/AMD 引入 AGPL-3.0 的 `lshqqytiger/stable-diffusion-webui-amdgpu`，锁定 `9cb6e4c5431b440b55dc5da037bcdbcf220bf511`，使用 DirectML，不冒充原生 Intel XPU。版本、设备探测和实机验证边界见 [HARDWARE_BACKENDS.md](HARDWARE_BACKENDS.md)。
+
 - 官方已有 Windows/Linux 启动脚本，但缺少完整 GUI 启动器、多实例、资产库、诊断和回滚控制面。
 - 加 `--api` 可使用 REST API，运行时 `/docs` 是对应版本的权威 OpenAPI。
 - `--data-dir`、`--models-dir` 及 checkpoint/VAE/embedding/LoRA 等目录参数支持仓库外数据布局。

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "windows-amd-directml",
+  "displayName": "AMD / DirectML (experimental)",
+  "channel": "experimental",
+  "backend": "directml",
+  "vendor": "amd",
+  "upstreamCommit": "9cb6e4c5431b440b55dc5da037bcdbcf220bf511",
+  "torchCommand": "pip install torch==2.4.1 torchvision==0.19.1 torch-directml==0.2.5.dev240914 numpy==1.26.4",
+  "launchArgs": ["--use-directml", "--skip-ort", "--precision", "full", "--no-half", "--no-half-vae", "--lowvram", "--opt-split-attention"],
+  "note": "AMD DirectML 兼容方案，需要支持 DirectX 12 的驱动。未进行 AMD 实机验证，性能和扩展支持可能不同。不会覆盖 NVIDIA 环境。"
+}

@@ -159,6 +159,7 @@
               <TextBlock Text="初次安装点这里^_^" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
               <TextBlock Text="独立的python环境，不干扰本地配置" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
               <Button x:Name="setupButton" Content="一键配置 / 修复运行环境" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="自动下载并配置 Python、引擎和依赖，全部放在项目内。首次需要联网，不修改系统 Python。"/>
+              <Button x:Name="hardwareButton" Content="选择显卡 / 安装后端" Style="{StaticResource CardButton}" Margin="0,10,0,0" ToolTip="NVIDIA、Intel DirectML、AMD DirectML 或 CPU；分别安装，不覆盖旧环境。"/>
               <Button x:Name="openLogsButton" Content="查看运行日志" Style="{StaticResource CardButton}" Margin="0,10,0,0"/>
             </StackPanel>
           </Border>

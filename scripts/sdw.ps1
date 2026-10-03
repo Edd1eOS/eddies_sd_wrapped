@@ -46,7 +46,7 @@ function Write-HumanResult {
 
 try {
     if ($Command.StartsWith('training-')) {
-        & (Join-Path $PSScriptRoot 'training.ps1') -Command $Command -DataRoot $DataRoot -Json:$Json
+        & (Join-Path $PSScriptRoot 'training.ps1') -Command $Command -DataRoot $DataRoot -ProfileId $ProfileId -Json:$Json
         exit $LASTEXITCODE
     }
     switch ($Command) {

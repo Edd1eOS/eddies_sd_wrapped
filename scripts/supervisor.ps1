@@ -67,7 +67,7 @@ function Write-StateAtomic {
 }
 
 function Ensure-SdwUiSettings {
-    param([Parameter(Mandatory = $true)][string]$UserDataRoot, [string]$OutputsRoot)
+    param([Parameter(Mandatory = $true)][string]$UserDataRoot, [string]$OutputsRoot, [switch]$DirectML)
 
     $settingsPath = Join-Path $UserDataRoot 'config.json'
     $settings = New-Object PSObject
@@ -80,6 +80,11 @@ function Ensure-SdwUiSettings {
         }
     }
 
+    # Localized Windows / integrated adapters can fail PDH memory queries.
+    # Prefer the upstream non-PDH provider for a new DirectML configuration.
+    if ($DirectML -and $null -eq $settings.PSObject.Properties['directml_memory_provider']) {
+        $settings | Add-Member -NotePropertyName 'directml_memory_provider' -NotePropertyValue 'None'
+    }
     $quickSettings = @()
     $property = $settings.PSObject.Properties['quicksettings_list']
     if ($null -ne $property) {
@@ -215,7 +220,7 @@ if (-not (Test-Path -LiteralPath $logDirectory)) { $null = New-Item -ItemType Di
 $logEncoding = New-Object Text.UTF8Encoding($false)
 $script:LogWriter = New-Object IO.StreamWriter($LogPath, $true, $logEncoding)
 $script:LogWriter.AutoFlush = $true
-Ensure-SdwUiSettings -UserDataRoot $userDataRoot -OutputsRoot $managedPaths.OutputsRoot
+Ensure-SdwUiSettings -UserDataRoot $userDataRoot -OutputsRoot $managedPaths.OutputsRoot -DirectML:($profileArguments -contains '--use-directml')
 Write-LogLine -Stream 'supervisor' -Line 'Ensured checkpoint and VAE selectors are visible in A1111 quick settings.'
 
 $supervisorProcess = Get-Process -Id $PID
@@ -284,6 +289,9 @@ try {
     $info.EnvironmentVariables['WEBUI_LAUNCH_LIVE_OUTPUT'] = '1'
     $info.EnvironmentVariables['PIP_DISABLE_PIP_VERSION_CHECK'] = '1'
     $info.EnvironmentVariables['PYTHONUTF8'] = '1'
+    $info.EnvironmentVariables['PYTHONNOUSERSITE'] = '1'
+    $info.EnvironmentVariables['PYTHONUNBUFFERED'] = '1'
+    if ($profileArguments -contains '--use-directml') { $info.EnvironmentVariables['PIP_NO_BUILD_ISOLATION'] = '0' }
     $info.EnvironmentVariables['PYTHONIOENCODING'] = 'utf-8'
     $info.EnvironmentVariables['PATH'] = ($pythonDirectory + ';' + (Join-Path $pythonDirectory 'Scripts') + ';' + $gitDirectory + ';' + $gitCmdDirectory + ';' + $env:PATH)
 

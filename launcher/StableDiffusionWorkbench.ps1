@@ -321,7 +321,7 @@ try {
         'SELECT Name FROM Win32_VideoController WHERE Name IS NOT NULL'
     )
     $names = @($searcher.Get() | ForEach-Object { [string]$_.Name } | Where-Object { $_ })
-    $preferred = @($names | Where-Object { $_ -match '(?i)NVIDIA|AMD|Radeon|Intel.*Arc' })
+    $preferred = @($names | Where-Object { $_ -match '(?i)NVIDIA|AMD|Radeon|Intel' })
     if ($preferred.Count -gt 0) { $preferred -join ' / ' }
     elseif ($names.Count -gt 0) { $names -join ' / ' }
     else { '未检测到显卡' }
@@ -913,7 +913,7 @@ catch {
         $dialog.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
         $dialog.MaximizeBox = $false
         $dialog.MinimizeBox = $false
-        $dialog.ClientSize = New-Object System.Drawing.Size(620, 220)
+        $dialog.ClientSize = New-Object System.Drawing.Size(620, 390)
         $dialog.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
         $dialog.BackColor = [System.Drawing.Color]::FromArgb(228, 241, 232)
 
@@ -956,12 +956,12 @@ catch {
         $saveButton = New-Object System.Windows.Forms.Button
         $saveButton.Text = if ($InstallMode) { '一键配置' } else { '保存' }
         $saveButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
-        $saveButton.Location = New-Object System.Drawing.Point(399, 169)
+        $saveButton.Location = New-Object System.Drawing.Point(399, 340)
         $saveButton.Size = New-Object System.Drawing.Size(94, 34)
         $cancelButton = New-Object System.Windows.Forms.Button
         $cancelButton.Text = '取消'
         $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-        $cancelButton.Location = New-Object System.Drawing.Point(504, 169)
+        $cancelButton.Location = New-Object System.Drawing.Point(504, 340)
         $cancelButton.Size = New-Object System.Drawing.Size(94, 34)
 
         $browseButton.Add_Click({
@@ -976,7 +976,30 @@ catch {
             }
             $folderDialog.Dispose()
         })
+        $hardwareCaption = New-Object System.Windows.Forms.Label
+        $hardwareCaption.Text = '显卡与运行后端'
+        $hardwareCaption.Location = New-Object System.Drawing.Point(20, 148)
+        $hardwareCaption.AutoSize = $true
+        $hardwareSelector = New-Object System.Windows.Forms.ComboBox
+        $hardwareSelector.Location = New-Object System.Drawing.Point(20, 170)
+        $hardwareSelector.Size = New-Object System.Drawing.Size(578, 30)
+        $hardwareSelector.DropDownStyle = 'DropDownList'
+        $hardwareSelector.DisplayMember = 'displayName'
+        $hardwareProfiles = @(Get-ChildItem (Join-Path $script:RepositoryRoot 'profiles') -Filter '*.json' | ForEach-Object { Get-Content $_.FullName -Raw -Encoding UTF8 | ConvertFrom-Json })
+        foreach ($hardwareProfile in $hardwareProfiles) { [void]$hardwareSelector.Items.Add($hardwareProfile) }
+        $hardwareNote = New-Object System.Windows.Forms.Label
+        $hardwareNote.Location = New-Object System.Drawing.Point(20, 211)
+        $hardwareNote.Size = New-Object System.Drawing.Size(578, 120)
+        $hardwareSelector.Add_SelectedIndexChanged({
+            $item = $hardwareSelector.SelectedItem
+            $hardwareNote.Text = if ($item.PSObject.Properties['note']) { $item.note } else { 'NVIDIA 原版后端。RTX 50 系列选择 Blackwell。环境独立保存，模型与输出共用。切换前停止引擎。' }
+        })
+        $selectedProfileId = [string](Get-SdwObjectValue $script:CurrentSummary @('profileId') '')
+        $hardwareSelector.SelectedIndex = 0
+        for ($i = 0; $i -lt $hardwareProfiles.Count; $i++) { if ($hardwareProfiles[$i].id -eq $selectedProfileId) { $hardwareSelector.SelectedIndex = $i } }
+        $hardwareSelector.Enabled = [bool]$InstallMode
         $dialog.Controls.AddRange(@(
+            $hardwareCaption, $hardwareSelector, $hardwareNote,
             $dataCaption, $dataText, $browseButton, $portCaption, $portInput,
             $saveButton, $cancelButton
         ))
@@ -995,7 +1018,7 @@ catch {
                 if ($InstallMode) {
                     $confirmation = [System.Windows.Forms.MessageBox]::Show(
                         $dialog,
-                        "Stable Diffusion 的隔离 Python、PyTorch、模型和输出将存放在：`r`n`r`n$selectedRoot`r`n`r`n安装不会修改系统 Python 或全局 PATH。是否开始安装？",
+                        "所选方案：$($hardwareSelector.SelectedItem.displayName)`r`n`r`n隔离 Python 和引擎将安装到：`r`n$selectedRoot`r`n`r`n模型与输出保持现有目录。安装不会修改系统 Python 或全局 PATH。是否开始安装？",
                         '确认安装位置',
                         [System.Windows.Forms.MessageBoxButtons]::YesNo,
                         [System.Windows.Forms.MessageBoxIcon]::Question,
@@ -1008,6 +1031,7 @@ catch {
                         Add-SdwLogLine "已确认引擎存储位置：$selectedRoot"
                         Queue-SdwAction -Command 'setup' -Parameters ([ordered]@{
                             DataRoot = $selectedRoot
+                            ProfileId = [string]$hardwareSelector.SelectedItem.id
                         }) -DisplayName '安装 Stable Diffusion'
                     }
                 }
@@ -1175,6 +1199,14 @@ catch {
         Queue-SdwAction -Command 'start' -Parameters ([ordered]@{}) -DisplayName '启动并打开生成界面'
     }
 
+    $window.FindName('hardwareButton').Add_Click({
+        if (Test-SdwActionBusy) { Show-SdwBusyNotice; return }
+        if (ConvertTo-SdwBoolean (Get-SdwObjectValue $script:CurrentSummary @('running') $false)) {
+            Show-SdwLifecycleNotice -Message '请先停止出图引擎，再选择并安装其他后端。'
+            return
+        }
+        Show-SdwSettingsDialog -InstallMode
+    })
     $setupButton.Add_Click({
         $state = Get-SdwNormalizedState $script:CurrentSummary
         $installed = ConvertTo-SdwBoolean (Get-SdwObjectValue $script:CurrentSummary @('installed') $false)
@@ -1202,9 +1234,38 @@ catch {
     $openOutputsButton.Add_Click({ Queue-SdwAction -Command 'open-outputs' -Parameters ([ordered]@{}) -DisplayName '打开输出管理' })
     $openLogsButton.Add_Click({ Queue-SdwAction -Command 'logs' -Parameters ([ordered]@{}) -DisplayName '查看运行日志' })
     $trainingSetupButton.Add_Click({
-        if ([System.Windows.Forms.MessageBox]::Show($form, '将联网下载独立 Python 和 Kohya 训练依赖（数 GB），全部保存在本项目 data/training。不会修改出图环境，也不会自动开始训练。继续吗？', '配置 LoRA 训练环境', 'YesNo', 'Question') -eq 'Yes') {
-            Queue-SdwAction -Command 'training-setup' -Parameters ([ordered]@{}) -DisplayName '配置独立训练环境'
+        if(Test-SdwActionBusy){Show-SdwBusyNotice;return}
+        $dialog=New-Object System.Windows.Forms.Form
+        $dialog.Text='选择 LoRA 训练显卡（不是 CPU 品牌）'
+        $dialog.StartPosition='CenterParent'
+        $dialog.ClientSize=New-Object System.Drawing.Size(620,300)
+        $dialog.Font=New-Object System.Drawing.Font('Microsoft YaHei UI',9)
+        $dialog.FormBorderStyle='FixedDialog';$dialog.MaximizeBox=$false;$dialog.MinimizeBox=$false
+        $choices=@(Get-Content (Join-Path $script:RepositoryRoot 'configs\training-profiles.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $selector=New-Object System.Windows.Forms.ComboBox
+        $selector.Location=New-Object System.Drawing.Point(20,20);$selector.Size=New-Object System.Drawing.Size(580,30)
+        $selector.DropDownStyle='DropDownList';$selector.DisplayMember='displayName'
+        foreach($choice in $choices){[void]$selector.Items.Add($choice)}
+        $note=New-Object System.Windows.Forms.Label
+        $note.Location=New-Object System.Drawing.Point(20,65);$note.Size=New-Object System.Drawing.Size(580,155)
+        $install=New-Object System.Windows.Forms.Button
+        $install.Text='一键配置 / 切换';$install.Location=New-Object System.Drawing.Point(325,240);$install.Size=New-Object System.Drawing.Size(150,36);$install.DialogResult='OK'
+        $cancel=New-Object System.Windows.Forms.Button
+        $cancel.Text='取消';$cancel.Location=New-Object System.Drawing.Point(495,240);$cancel.Size=New-Object System.Drawing.Size(105,36);$cancel.DialogResult='Cancel'
+        $selector.Add_SelectedIndexChanged({$note.Text=$selector.SelectedItem.note + "`r`n`r`n数 GB 下载，保存在项目 data/training；各方案独立。不会修改出图环境，也不会自动开始训练。切换前请停止训练服务。"})
+        $selector.SelectedIndex=0
+        $selectionFile=Join-Path $script:RepositoryRoot 'data\training\selection.json'
+        if(Test-Path $selectionFile){
+            $selected=(Get-Content $selectionFile -Raw | ConvertFrom-Json).profileId
+            for($i=0;$i -lt $choices.Count;$i++){if($choices[$i].id -eq $selected){$selector.SelectedIndex=$i}}
         }
+        $dialog.Controls.AddRange(@($selector,$note,$install,$cancel));$dialog.CancelButton=$cancel
+        try {
+            if($dialog.ShowDialog($form) -eq 'OK') {
+                if(-not $selector.SelectedItem.enabled){Show-SdwLifecycleNotice -Title '训练方案暂不支持' -Message $selector.SelectedItem.note;return}
+                Queue-SdwAction -Command 'training-setup' -Parameters ([ordered]@{ProfileId=[string]$selector.SelectedItem.id}) -DisplayName ('配置训练环境：'+$selector.SelectedItem.displayName)
+            }
+        } finally {$dialog.Dispose()}
     })
     $trainingOpenButton.Add_Click({ Queue-SdwAction -Command 'training-open' -Parameters ([ordered]@{}) -DisplayName '打开 LoRA 训练界面（不会自动训练）' })
     $trainingDataButton.Add_Click({ Queue-SdwAction -Command 'training-data' -Parameters ([ordered]@{}) -DisplayName '打开训练素材' })

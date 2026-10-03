@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "windows-intel-directml",
+  "displayName": "Intel / DirectML (experimental)",
+  "channel": "experimental",
+  "backend": "directml",
+  "vendor": "intel",
+  "upstreamCommit": "9cb6e4c5431b440b55dc5da037bcdbcf220bf511",
+  "torchCommand": "pip install torch==2.4.1 torchvision==0.19.1 torch-directml==0.2.5.dev240914 numpy==1.26.4",
+  "launchArgs": ["--use-directml", "--skip-ort", "--precision", "full", "--no-half", "--no-half-vae", "--lowvram", "--opt-split-attention"],
+  "note": "Intel 实验方案，非原生 XPU。需要 DirectX 12 驱动。已测本机 Intel 核显：安装启动通过，但成图异常，未通过画质验收；Arc 尚未实机验证。不自动退回 CPU。默认低显存模式，速度较慢；LoRA 训练需另行配置实验性 XPU 环境，不与此处共用。"
+}

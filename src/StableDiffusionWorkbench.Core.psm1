@@ -550,16 +550,16 @@ function Get-SdwGpuInfo {
         }
         catch { }
     }
-    if ($names.Count -eq 0) {
-        try {
-            if ($PSVersionTable.PSVersion.Major -le 5) { $controllers = Get-WmiObject -Class Win32_VideoController -ErrorAction Stop }
-            else { $controllers = Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop }
-            foreach ($controller in $controllers) {
-                if (-not [string]::IsNullOrWhiteSpace($controller.Name)) { $names.Add([string]$controller.Name) }
-            }
+    # Include integrated adapters even when nvidia-smi already found a GPU.
+    # DirectML users must be able to see their Intel/AMD adapter on hybrid PCs.
+    try {
+        if ($PSVersionTable.PSVersion.Major -le 5) { $controllers = Get-WmiObject -Class Win32_VideoController -ErrorAction Stop }
+        else { $controllers = Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop }
+        foreach ($controller in $controllers) {
+            if (-not [string]::IsNullOrWhiteSpace($controller.Name) -and -not $names.Contains([string]$controller.Name)) { $names.Add([string]$controller.Name) }
         }
-        catch { }
     }
+    catch { }
 
     $joined = $names -join '; '
     return [pscustomobject]@{
@@ -582,7 +582,10 @@ function Get-SdwProfile {
     if ([string]::IsNullOrWhiteSpace($ProfileId) -or $ProfileId -eq 'auto') {
         $gpu = Get-SdwGpuInfo
         if ($gpu.IsBlackwell) { $ProfileId = 'windows-nvidia-blackwell' }
-        else { $ProfileId = 'windows-nvidia-standard' }
+        elseif ($gpu.HasNvidia) { $ProfileId = 'windows-nvidia-standard' }
+        elseif ($gpu.DisplayName -match '(?i)Intel') { $ProfileId = 'windows-intel-directml' }
+        elseif ($gpu.DisplayName -match '(?i)AMD|Radeon') { $ProfileId = 'windows-amd-directml' }
+        else { $ProfileId = 'windows-cpu' }
     }
     if ($ProfileId -notmatch '^[a-z0-9][a-z0-9-]{1,63}$') {
         Throw-SdwError -Message ("Invalid profile id: {0}" -f $ProfileId) -ExitCode 2
@@ -595,6 +598,23 @@ function Get-SdwProfile {
         Throw-SdwError -Message ("Profile internal id must be safe and exactly match its file name: {0}" -f $path) -ExitCode 2
     }
     return $profile
+}
+
+function Invoke-SdwDeviceProbe {
+    param($Paths, $Profile, $Executables, [hashtable]$Environment = @{})
+    $backend = if ($Profile.PSObject.Properties['backend']) { [string]$Profile.backend } else { 'cuda' }
+    $arguments = @((Join-Path $Paths.RepositoryRoot 'scripts\probe-device.py'), $backend)
+    if ($backend -eq 'directml') { $arguments += @('--vendor', [string]$Profile.vendor) }
+    return Invoke-SdwNativeCommand -FilePath $Executables.PythonPath -Arguments $arguments -WorkingDirectory $Executables.CheckoutPath -Environment $Environment -AllowFailure
+}
+
+function Get-SdwProfileRepository {
+    param($Paths, $Profile)
+    $lock = Read-SdwJson -Path $Paths.UpstreamLockPath
+    $entry = $lock.upstream.profiles.PSObject.Properties[[string]$Profile.id]
+    if ($null -eq $entry -or [string]$entry.Value.commit -ne [string]$Profile.upstreamCommit) { throw 'Profile does not match upstream lock.' }
+    if ($entry.Value.PSObject.Properties['repository']) { return [string]$entry.Value.repository }
+    return [string]$lock.upstream.repository
 }
 
 function Get-SdwProfileId {
@@ -743,6 +763,7 @@ function New-SdwEnvironment {
         WEBUI_LAUNCH_LIVE_OUTPUT = '1'
         PIP_DISABLE_PIP_VERSION_CHECK = '1'
         PYTHONUTF8 = '1'
+        PYTHONNOUSERSITE = '1'
         PYTHONIOENCODING = 'utf-8'
         PATH = ($pythonDirectory + ';' + $gitDirectory + ';' + $env:PATH)
     }
@@ -944,9 +965,6 @@ function Invoke-SdwSetup {
     }
     if (-not [Environment]::Is64BitOperatingSystem) { Throw-SdwError -Message 'A 64-bit Windows installation is required.' -ExitCode 3 }
     $gpu = Get-SdwGpuInfo
-    if (-not $gpu.HasNvidia) {
-        Throw-SdwError -Message 'This MVP requires a supported NVIDIA GPU and driver; no NVIDIA GPU was detected.' -ExitCode 3
-    }
 
     $paths = Get-SdwPaths -RepositoryRoot $RepositoryRoot -DataRoot $DataRoot
     if (Test-SdwPathEncrypted -Path $paths.DataRoot) {
@@ -966,6 +984,8 @@ function Invoke-SdwSetup {
     if ([string]::IsNullOrWhiteSpace($ProfileId)) { $ProfileId = [string]$configuration.profileId }
     $profile = Get-SdwProfile -RepositoryRoot $RepositoryRoot -ProfileId $ProfileId
     $profileIdResolved = Get-SdwProfileId -Profile $profile
+    $sourceRepository = Get-SdwProfileRepository -Paths $paths -Profile $profile
+    if ($profileIdResolved -like 'windows-nvidia-*' -and -not $gpu.HasNvidia) { throw 'No NVIDIA GPU detected. Select the matching hardware profile.' }
     $commit = Get-SdwProfileCommit -Profile $profile
     if ($commit -notmatch '^[0-9a-fA-F]{40}$') { Throw-SdwError -Message 'The profile upstream commit must be a full 40-character SHA.' -ExitCode 2 }
     $torchCommand = Get-SdwProfileTorchCommand -Profile $profile
@@ -994,14 +1014,15 @@ function Invoke-SdwSetup {
                 throw 'The managed upstream checkout is dirty; it will be replaced by a fresh isolated version.'
             }
             $repairEnvironment = New-SdwEnvironment -PythonPath $repairExecutables.PythonPath -GitPath $repairExecutables.GitPath -TorchCommand $torchCommand
+            if ($launchArguments -contains '--use-directml') { $repairEnvironment['PIP_NO_BUILD_ISOLATION'] = '0' }
             Write-Output 'Repairing pip and A1111 dependencies in the existing locked runtime...'
             Initialize-SdwPip -PythonPath $repairExecutables.PythonPath -WorkingDirectory $versionPath -Environment $repairEnvironment -LogPath $paths.SetupLogPath
             Initialize-SdwA1111Compatibility -PythonPath $repairExecutables.PythonPath -WorkingDirectory $versionPath -Environment $repairEnvironment -LogPath $paths.SetupLogPath
-            $null = Invoke-SdwNativeCommand -FilePath $repairExecutables.PythonPath -Arguments @('launch.py', '--exit') -WorkingDirectory $repairExecutables.CheckoutPath -Environment $repairEnvironment -LogPath $paths.SetupLogPath -ExitCodeOnFailure 6
+            $null = Invoke-SdwNativeCommand -FilePath $repairExecutables.PythonPath -Arguments (@('launch.py', '--exit') + $launchArguments) -WorkingDirectory $repairExecutables.CheckoutPath -Environment $repairEnvironment -LogPath $paths.SetupLogPath -ExitCodeOnFailure 6
             Complete-SdwA1111Dependencies -PythonPath $repairExecutables.PythonPath -WorkingDirectory $repairExecutables.CheckoutPath -Environment $repairEnvironment -LogPath $paths.SetupLogPath
-            $repairTorch = Invoke-SdwNativeCommand -FilePath $repairExecutables.PythonPath -Arguments @('-c', 'import torch; print(torch.__version__); print(torch.version.cuda or "none"); print(torch.cuda.is_available())') -WorkingDirectory $repairExecutables.CheckoutPath -Environment $repairEnvironment -LogPath $paths.SetupLogPath -AllowFailure
-            if ($repairTorch.ExitCode -ne 0 -or $repairTorch.StandardOutput -notmatch '(?im)^True\s*$') {
-                throw 'CUDA validation failed after repairing the existing runtime.'
+            $repairTorch = Invoke-SdwDeviceProbe -Paths $paths -Profile $profile -Executables $repairExecutables -Environment $repairEnvironment
+            if ($repairTorch.ExitCode -ne 0) {
+                throw ('Device validation failed: ' + $repairTorch.StandardError)
             }
             $repairSucceeded = $true
         }
@@ -1018,13 +1039,15 @@ function Invoke-SdwSetup {
             }
             Write-SdwJsonAtomic -Path $paths.ActivePath -Value $active
             $null = Set-SdwConfiguration -RepositoryRoot $RepositoryRoot -DataRoot $paths.DataRoot -Port ([int]$configuration.port) -ProfileId $profileIdResolved
-            Write-Output ("Runtime repair and CUDA validation completed: {0}" -f $versionPath)
+            Write-Output ("Runtime repair and device validation completed: {0}" -f $versionPath)
             return [pscustomobject]$active
         }
         $versionPath = Join-Path $paths.VersionsRoot ('{0}-repair-{1}' -f $baseName, [DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))
     }
     elseif ($existingVersionValid) {
         $executables = Get-SdwRuntimeExecutables -VersionPath $versionPath
+        $probe = Invoke-SdwDeviceProbe -Paths $paths -Profile $profile -Executables $executables
+        if ($probe.ExitCode -ne 0) { throw ('Cannot activate this hardware environment: ' + $probe.StandardError) }
         $active = [ordered]@{
             schemaVersion = 1; profileId = $profileIdResolved; profileName = (Get-SdwProfileDisplayName -Profile $profile)
             upstreamCommit = $commit; versionPath = $versionPath; checkoutPath = $executables.CheckoutPath
@@ -1069,14 +1092,17 @@ function Invoke-SdwSetup {
         if (-not (Test-Path -LiteralPath $executables.PythonPath -PathType Leaf)) { Throw-SdwError -Message 'Bundled Python was not found after extraction.' -ExitCode 8 }
         if (-not (Test-Path -LiteralPath $executables.GitPath -PathType Leaf)) { Throw-SdwError -Message 'Bundled Git was not found after extraction.' -ExitCode 8 }
         $environment = New-SdwEnvironment -PythonPath $executables.PythonPath -GitPath $executables.GitPath -TorchCommand $torchCommand
+        # pip's negative option uses 0 to disable build isolation. The portable
+        # interpreter cannot resolve its DLL modules in pip's temporary build site.
+        if ($launchArguments -contains '--use-directml') { $environment['PIP_NO_BUILD_ISOLATION'] = '0' }
         Write-Output 'Checking pip in the isolated runtime...'
         Initialize-SdwPip -PythonPath $executables.PythonPath -WorkingDirectory $staging -Environment $environment -LogPath $paths.SetupLogPath
         Initialize-SdwA1111Compatibility -PythonPath $executables.PythonPath -WorkingDirectory $staging -Environment $environment -LogPath $paths.SetupLogPath
 
-        Write-Output ("Cloning AUTOMATIC1111 at exact commit {0}..." -f $commit)
+        Write-Output ("Cloning {0} at exact commit {1}..." -f $sourceRepository, $commit)
         $null = New-Item -ItemType Directory -Path $executables.CheckoutPath
         $null = Invoke-SdwNativeCommand -FilePath $executables.GitPath -Arguments @('-C', $executables.CheckoutPath, 'init') -Environment $environment -LogPath $paths.SetupLogPath
-        $null = Invoke-SdwNativeCommand -FilePath $executables.GitPath -Arguments @('-C', $executables.CheckoutPath, 'remote', 'add', 'origin', 'https://github.com/AUTOMATIC1111/stable-diffusion-webui.git') -Environment $environment -LogPath $paths.SetupLogPath
+        $null = Invoke-SdwNativeCommand -FilePath $executables.GitPath -Arguments @('-C', $executables.CheckoutPath, 'remote', 'add', 'origin', $sourceRepository) -Environment $environment -LogPath $paths.SetupLogPath
         $null = Invoke-SdwNativeCommand -FilePath $executables.GitPath -Arguments @('-C', $executables.CheckoutPath, 'fetch', '--depth', '1', 'origin', $commit) -Environment $environment -LogPath $paths.SetupLogPath
         $null = Invoke-SdwNativeCommand -FilePath $executables.GitPath -Arguments @('-C', $executables.CheckoutPath, 'checkout', '--detach', 'FETCH_HEAD') -Environment $environment -LogPath $paths.SetupLogPath
         $head = Invoke-SdwNativeCommand -FilePath $executables.GitPath -Arguments @('-C', $executables.CheckoutPath, 'rev-parse', 'HEAD') -Environment $environment -LogPath $paths.SetupLogPath
@@ -1085,11 +1111,10 @@ function Invoke-SdwSetup {
         }
 
         Write-Output 'Installing and validating A1111 dependencies. This can take several minutes...'
-        $null = Invoke-SdwNativeCommand -FilePath $executables.PythonPath -Arguments @('launch.py', '--exit') -WorkingDirectory $executables.CheckoutPath -Environment $environment -LogPath $paths.SetupLogPath -ExitCodeOnFailure 6
+        $null = Invoke-SdwNativeCommand -FilePath $executables.PythonPath -Arguments (@('launch.py', '--exit') + $launchArguments) -WorkingDirectory $executables.CheckoutPath -Environment $environment -LogPath $paths.SetupLogPath -ExitCodeOnFailure 6
         Complete-SdwA1111Dependencies -PythonPath $executables.PythonPath -WorkingDirectory $executables.CheckoutPath -Environment $environment -LogPath $paths.SetupLogPath
-        $torch = Invoke-SdwNativeCommand -FilePath $executables.PythonPath -Arguments @('-c', 'import torch; print(torch.__version__); print(torch.version.cuda or "none"); print(torch.cuda.is_available())') -WorkingDirectory $executables.CheckoutPath -Environment $environment -LogPath $paths.SetupLogPath -AllowFailure
-        if ($torch.ExitCode -ne 0) { Throw-SdwError -Message 'PyTorch validation failed after setup.' -ExitCode 6 }
-        if ($torch.StandardOutput -notmatch '(?im)^True\s*$') { Throw-SdwError -Message 'PyTorch installed, but CUDA is not available to the bundled runtime. Check the NVIDIA driver and selected profile.' -ExitCode 6 }
+        $torch = Invoke-SdwDeviceProbe -Paths $paths -Profile $profile -Executables $executables -Environment $environment
+        if ($torch.ExitCode -ne 0) { Throw-SdwError -Message ('Selected device validation failed; no CPU fallback. ' + $torch.StandardError) -ExitCode 6 }
         if (-not (Test-SdwInstalledVersion -VersionPath $staging -ExpectedCommit $commit)) {
             Throw-SdwError -Message 'The staged A1111 checkout changed or failed exact-lock validation during dependency installation; activation was refused.' -ExitCode 8
         }
@@ -1432,6 +1457,14 @@ function Invoke-SdwStart {
                 Throw-SdwError -Message ("Port {0} is already in use. The launcher will not stop or replace an unrelated process." -f $Port) -ExitCode 5
             }
             $ownerToken = [Guid]::NewGuid().ToString('D')
+            $selectedProfile = Get-SdwProfile -RepositoryRoot $RepositoryRoot -ProfileId $active.profileId
+            $probe = Invoke-SdwDeviceProbe -Paths $paths -Profile $selectedProfile -Executables ([pscustomobject]@{PythonPath=$active.pythonPath; CheckoutPath=$active.checkoutPath})
+            if ($probe.ExitCode -ne 0) { throw ('Device check failed: ' + $probe.StandardError) }
+            if ($selectedProfile.PSObject.Properties['backend'] -and $selectedProfile.backend -eq 'directml') {
+                $device = $probe.StandardOutput.Trim() | ConvertFrom-Json
+                $active.launchArgs = @($active.launchArgs) + @('--device-id', [string][int]$device.index)
+                Write-Output ('Using DirectML device: ' + $device.name)
+            }
             $process = Start-SdwSupervisorProcess -Paths $paths -Active $active -Port $Port -OwnerToken $ownerToken
             $supervisorPid = $process.Id
             $stateDeadline = [DateTime]::UtcNow.AddSeconds(10)
@@ -1631,8 +1664,7 @@ function Invoke-SdwDoctor {
     else { $checks.Add((New-SdwDoctorCheck 'platform' 'fail' 'error' 'Windows x64 is required.' 'Use a 64-bit Windows 10 or 11 host.')) }
 
     $gpu = Get-SdwGpuInfo
-    if ($gpu.HasNvidia) { $checks.Add((New-SdwDoctorCheck 'nvidia' 'pass' 'info' ("NVIDIA GPU: {0}; driver {1}; VRAM {2} MiB." -f $gpu.DisplayName, $gpu.DriverVersion, $gpu.MemoryMiB) '')) }
-    else { $checks.Add((New-SdwDoctorCheck 'nvidia' 'fail' 'error' 'No NVIDIA GPU was detected.' 'Install a supported NVIDIA GPU and current driver.')) }
+    $checks.Add((New-SdwDoctorCheck 'hardware' 'pass' 'info' ("Detected display devices: {0}; actual selected backend is checked below." -f $gpu.DisplayName) ''))
     try {
         $profile = Get-SdwProfile -RepositoryRoot $RepositoryRoot -ProfileId $ProfileId
         $checks.Add((New-SdwDoctorCheck 'profile' 'pass' 'info' ("Selected profile: {0}." -f (Get-SdwProfileDisplayName -Profile $profile)) ''))
@@ -1670,11 +1702,12 @@ function Invoke-SdwDoctor {
             else { $checks.Add((New-SdwDoctorCheck 'upstream-dirty' 'warn' 'warning' 'Upstream checkout has local changes or could not be inspected.' 'Do not edit the managed upstream checkout; run repair if needed.')) }
         }
         if (Test-Path -LiteralPath ([string]$active.pythonPath) -PathType Leaf) {
-            $python = Invoke-SdwNativeCommand -FilePath ([string]$active.pythonPath) -Arguments @('-c', 'import sys,pip,torch; print(sys.version.split()[0]); print(torch.__version__); print(torch.version.cuda or "none"); print(torch.cuda.is_available())') -WorkingDirectory ([string]$active.checkoutPath) -AllowFailure
-            if ($python.ExitCode -eq 0 -and $python.StandardOutput -match '(?im)^True\s*$') {
-                $checks.Add((New-SdwDoctorCheck 'python-torch' 'pass' 'info' ("Python/pip/Torch with CUDA: {0}" -f (($python.StandardOutput.Trim() -split "`r?`n") -join ', ')) ''))
+            $deviceProfile = Get-SdwProfile -RepositoryRoot $RepositoryRoot -ProfileId $active.profileId
+            $python = Invoke-SdwDeviceProbe -Paths $paths -Profile $deviceProfile -Executables ([pscustomobject]@{PythonPath=$active.pythonPath; CheckoutPath=$active.checkoutPath})
+            if ($python.ExitCode -eq 0) {
+                $checks.Add((New-SdwDoctorCheck 'python-torch' 'pass' 'info' ("Device computation verified: {0}" -f $python.StandardOutput.Trim()) ''))
             }
-            else { $checks.Add((New-SdwDoctorCheck 'python-torch' 'fail' 'error' 'Python, pip, Torch, or CUDA validation failed.' 'Run repair and inspect setup.log; verify the NVIDIA driver.')) }
+            else { $checks.Add((New-SdwDoctorCheck 'python-torch' 'fail' 'error' ('Selected device validation failed. ' + $python.StandardError) 'Check hardware profile and graphics driver; no automatic CPU fallback.')) }
 
             $pipCheck = Invoke-SdwNativeCommand -FilePath ([string]$active.pythonPath) -Arguments @('-m', 'pip', 'check') -WorkingDirectory ([string]$active.checkoutPath) -AllowFailure
             if ($pipCheck.ExitCode -eq 0) {

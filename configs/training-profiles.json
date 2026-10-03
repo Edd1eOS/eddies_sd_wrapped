@@ -1,0 +1,6 @@
+[
+  {"id":"nvidia","displayName":"NVIDIA / CUDA（现有方案）","backend":"cuda","enabled":true,"port":7861,"note":"按显卡选择，不按 i5 / i7 处理器选择。沿用现有 Kohya 冻结依赖，环境保持不变。"},
+  {"id":"intel-xpu","displayName":"Intel 显卡 / XPU（实验）","backend":"xpu","enabled":true,"port":7862,"torch":"2.7.1+xpu","torchvision":"0.22.1+xpu","index":"https://download.pytorch.org/whl/xpu","note":"需要 XPU 支持的 Intel 显卡及驱动，不是 i7 处理器就支持。本机核显反向传播测试超时，Arc 和完整 LoRA 训练尚未验收。独立环境，检查失败不切换。默认 AdamW、SDPA、全精度，不用 CUDA xformers / 8bit 优化器。"},
+  {"id":"cpu","displayName":"CPU / 处理器（极慢，实验备用）","backend":"cpu","enabled":true,"port":7863,"torch":"2.7.1+cpu","torchvision":"0.22.1+cpu","index":"https://download.pytorch.org/whl/cpu","note":"不使用显卡，不会自动启用。适合检查流程，实际 LoRA 训练可能非常慢并占用大量内存。默认 AdamW、SDPA、全精度；完整训练待验证。"},
+  {"id":"amd","displayName":"AMD 显卡（当前 Windows 训练未支持）","backend":"unsupported","enabled":false,"port":7864,"note":"当前 Kohya Windows 集成未验证 AMD ROCm 训练。DirectML 出图环境不能直接拿来训练。不会安装 NVIDIA 依赖或静默改用 CPU；需要单独的受支持 ROCm 系统方案。"}
+]

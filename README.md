@@ -8,6 +8,8 @@
 
 ## 使用方式
 
+Windows 显卡选择：点击「选择显卡 / 安装后端」。NVIDIA 使用原版引擎；Intel / AMD 是实验性 DirectML 方案；CPU 是慢速备用。Intel 本机核显测试成图异常，Arc / AMD 尚未实机验证，不能视为稳定支持。环境独立、模型共用，切换前停止引擎；驱动需自行安装，LoRA 训练兼容性另计。
+
 ```powershell
 git clone https://github.com/Edd1eOS/eddies_sd_wrapped.git
 cd eddies_sd_wrapped
@@ -16,7 +18,7 @@ cd eddies_sd_wrapped
 
 首次：一键配置运行环境 → 添加模型 → 打开生成界面。环境在项目 `data/`，模型在 `Models/`，结果在 `Outputs/`。
 
-LoRA 训练：配置训练环境 → 打开训练界面 → 选择 LoRA 页。训练前停止出图引擎；素材在 `datasets/lora/`，训练结果在 `training-runs/`。
+LoRA 训练：配置训练环境 → 选择训练显卡方案 → 打开训练界面 → 选择 LoRA 页。Intel XPU / CPU 为实验方案，AMD Windows 暂未支持；不按 i7 等 CPU 型号选显卡。训练前停止出图引擎；素材在 `datasets/lora/`，训练结果在 `training-runs/`。
 
 ## 目录
 

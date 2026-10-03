@@ -8,6 +8,17 @@
   "upstream": {
     "repository": "https://github.com/AUTOMATIC1111/stable-diffusion-webui.git",
     "profiles": {
+      "windows-intel-directml": {
+        "repository": "https://github.com/lshqqytiger/stable-diffusion-webui-amdgpu.git",
+        "commit": "9cb6e4c5431b440b55dc5da037bcdbcf220bf511"
+      },
+      "windows-amd-directml": {
+        "repository": "https://github.com/lshqqytiger/stable-diffusion-webui-amdgpu.git",
+        "commit": "9cb6e4c5431b440b55dc5da037bcdbcf220bf511"
+      },
+      "windows-cpu": {
+        "commit": "82a973c04367123ae98bd9abdf80d9eda9b910e2"
+      },
       "windows-nvidia-standard": {
         "commit": "82a973c04367123ae98bd9abdf80d9eda9b910e2"
       },

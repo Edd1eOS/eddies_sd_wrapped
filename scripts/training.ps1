@@ -4,13 +4,25 @@ param(
     [ValidateSet('training-setup','training-open','training-stop','training-status','training-data','training-output','training-logs')]
     [string]$Command,
     [string]$DataRoot,
+    [string]$ProfileId,
+    [switch]$PrepareOnly,
     [switch]$Json
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version 2
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Import-Module (Join-Path $repo 'src\StableDiffusionWorkbench.Core.psm1') -Force -DisableNameChecking
-$root=Join-Path $repo 'data\training'
+$baseRoot=Join-Path $repo 'data\training'
+$selectionPath=Join-Path $baseRoot 'selection.json'
+$profiles=@(Read-SdwJson -Path (Join-Path $repo 'configs\training-profiles.json'))
+if([string]::IsNullOrWhiteSpace($ProfileId)) {
+    $ProfileId='nvidia'
+    if(Test-Path $selectionPath){$ProfileId=[string](Read-SdwJson -Path $selectionPath).profileId}
+}
+$profile=$profiles | Where-Object {$_.id -eq $ProfileId} | Select-Object -First 1
+if($null -eq $profile){throw 'Unknown training hardware profile. Select nvidia, intel-xpu, cpu or amd.'}
+if(-not $profile.enabled){throw $profile.note}
+$root=if($ProfileId -eq 'nvidia'){$baseRoot}else{Join-Path $baseRoot ('backends\'+$ProfileId)}
 $lock=Read-SdwJson -Path (Join-Path $repo 'configs\training-lock.json')
 $checkout=Join-Path $root ('kohya-' + $lock.kohya.commit)
 $venv=Join-Path $root 'venv'
@@ -18,22 +30,25 @@ $python=Join-Path $venv 'Scripts\python.exe'
 $statePath=Join-Path $root 'service.json'
 $readyPath=Join-Path $root 'ready.json'
 $log=Join-Path $root 'logs\setup.log'
-$url='http://127.0.0.1:' + $lock.port
+$url='http://127.0.0.1:' + $profile.port
 $datasets=Join-Path $repo 'datasets\lora'
 $output=Join-Path $repo 'training-runs'
 
-function Get-TrainingProcess {
-    if (-not (Test-Path $statePath)) { return $null }
-    $s=Read-SdwJson -Path $statePath
+function Get-TrainingProcess([string]$ServiceRoot=$root) {
+    $serviceState=Join-Path $ServiceRoot 'service.json'
+    $servicePython=Join-Path $ServiceRoot 'venv\Scripts\python.exe'
+    if (-not (Test-Path $serviceState)) { return $null }
+    $s=Read-SdwJson -Path $serviceState
     $p=Get-Process -Id $s.pid -ErrorAction SilentlyContinue
     if (-not $p -or $p.StartTime.ToUniversalTime().ToString('o') -ne $s.started) { return $null }
     $c=Get-CimInstance Win32_Process -Filter ("ProcessId=" + $s.pid)
-    if ($c.ExecutablePath -ne $python -or -not $c.CommandLine.Contains($s.token) -or -not $c.CommandLine.Contains('training-host.py')) { return $null }
+    if ($c.ExecutablePath -ne $servicePython -or -not $c.CommandLine.Contains($s.token) -or -not $c.CommandLine.Contains('training-host.py')) { return $null }
     return $p
 }
 function Test-TrainingReady {
     if (-not (Test-Path $python) -or -not (Test-Path $readyPath)) { return $false }
     $r=Read-SdwJson -Path $readyPath
+    if($ProfileId -ne 'nvidia' -and (-not $r.PSObject.Properties['profileId'] -or $r.profileId -ne $ProfileId)){return $false}
     return ($r.commit -eq $lock.kohya.commit -and $r.root -eq $root -and (Test-Path (Join-Path $checkout 'kohya_gui.py')))
 }
 function Initialize-TrainingDirectories {
@@ -61,6 +76,9 @@ function Set-TrainingEnvironment {
     $env:HF_HUB_DISABLE_TELEMETRY='1'
     $env:PYTHONUTF8='1'
     $env:PYTHONIOENCODING='utf-8'
+    $env:PYTHONUNBUFFERED='1'
+    if($ProfileId -eq 'cpu'){$env:ACCELERATE_USE_CPU='true';$env:CUDA_VISIBLE_DEVICES='-1'}
+    else {$env:ACCELERATE_USE_CPU='false'}
     $env:PATH=(Join-Path $venv 'Scripts') + ';' + $env:PATH
 }
 function Get-TrainingAsset($asset,[string]$name) {
@@ -84,14 +102,16 @@ function Invoke-TrainingInstall([string]$Executable,[string[]]$Arguments) {
         $readers=@($proc.StandardOutput,$proc.StandardError)
         $pending=@($readers[0].ReadLineAsync(),$readers[1].ReadLineAsync())
         while($null -ne $pending[0] -or $null -ne $pending[1]) {
+            $readAny=$false
             for($i=0;$i -lt 2;$i++) {
                 if($null -ne $pending[$i] -and $pending[$i].IsCompleted) {
+                    $readAny=$true
                     $line=$pending[$i].GetAwaiter().GetResult()
                     if($null -eq $line){$pending[$i]=$null}
                     else {Write-Output $line;Add-Content -LiteralPath $log -Value $line -Encoding UTF8;$pending[$i]=$readers[$i].ReadLineAsync()}
                 }
             }
-            Start-Sleep -Milliseconds 100
+            if(-not $readAny){Start-Sleep -Milliseconds 50}
         }
         $proc.WaitForExit()
         if($proc.ExitCode -ne 0){throw "Environment installation failed ($($proc.ExitCode)); see $log. Click Configure again to retry."}
@@ -129,15 +149,19 @@ save_model_as = 'safetensors'
 output_dir = '$out'
 logging_dir = '$logs'
 "@
+        if($ProfileId -ne 'nvidia') {
+            $body += "`n[basic]`noptimizer = 'AdamW'`n[advanced]`nxformers = 'sdpa'`n[accelerate_launch]`nmixed_precision = 'no'`n"
+        }
         [IO.File]::WriteAllText($config,$body,(New-Object Text.UTF8Encoding($false)))
     }
     return $config
 }
 
 try {
+    if($PrepareOnly -and $Command -ne 'training-setup'){throw 'PrepareOnly is only valid for training-setup.'}
     if ($Command -eq 'training-status') {
         $p=Get-TrainingProcess
-        [pscustomobject]@{installed=(Test-TrainingReady);running=($null -ne $p);url=$url;root=$root} | ConvertTo-Json -Compress
+        [pscustomobject]@{installed=(Test-TrainingReady);running=($null -ne $p);url=$url;root=$root;profileId=$ProfileId;note=$profile.note} | ConvertTo-Json -Compress
         exit 0
     }
     Initialize-TrainingDirectories
@@ -154,11 +178,18 @@ try {
     }
     Set-TrainingEnvironment
     if($Command -eq 'training-setup') {
-        if(Get-TrainingProcess){throw 'Stop the training UI before configuring its environment.'}
+        $guardRoots=if($PrepareOnly){@($root)}else{@($baseRoot,(Join-Path $baseRoot 'backends\intel-xpu'),(Join-Path $baseRoot 'backends\cpu'))}
+        foreach($candidate in $guardRoots) {
+            if(Get-TrainingProcess -ServiceRoot $candidate){throw 'Stop the current training UI before configuring or switching its environment.'}
+        }
         $guard=$null
         try {
             $guard=[IO.File]::Open((Join-Path $root 'setup.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
-            if(Test-TrainingReady){Write-Output 'Training environment is already configured.';exit 0}
+            if(Test-TrainingReady){
+                $check=Invoke-SdwNativeCommand -FilePath $python -Arguments @((Join-Path $repo 'scripts\probe-training-device.py'),$profile.backend) -WorkingDirectory $checkout -LogPath $log
+                if(-not $PrepareOnly){Write-SdwJsonAtomic -Path $selectionPath -Value @{profileId=$ProfileId}}
+                Write-Output 'Existing training environment checked and selected.';exit 0
+            }
             Write-Output 'Preparing isolated Kohya environment; downloads may require several GB. System Python and generation runtime are unchanged.'
             $uvzip=Get-TrainingAsset $lock.uv 'uv.zip'
             $uvdir=Join-Path $root 'uv'
@@ -169,24 +200,45 @@ try {
             # Git archive can include an empty gitlink directory; remove only if empty.
             if((Test-Path $scriptsTarget) -and @(Get-ChildItem $scriptsTarget -Force).Count -eq 0){[IO.Directory]::Delete($scriptsTarget,$false)}
             Install-TrainingArchive $lock.scripts 'sd-scripts.zip' $scriptsTarget ('sd-scripts-'+$lock.scripts.commit)
-            Write-Output 'Downloading private Python and installing the upstream frozen dependency lock. Please wait; details are written to setup.log.'
-            Invoke-TrainingInstall -Executable $uv -Arguments @('sync','--frozen','--no-dev','--python',$lock.python,'--link-mode','copy')
-            Write-Output 'Checking CUDA, training dependencies and GUI imports...'
-            $check=Invoke-SdwNativeCommand -FilePath $python -Arguments @('-c','import torch,gradio,accelerate,transformers,kohya_gui; print(torch.__version__); print(torch.cuda.get_device_name(0)); assert torch.cuda.is_available(); x=torch.ones(1,device="cuda"); print((x+x).item())') -WorkingDirectory $checkout -LogPath $log
+            Write-Output 'Downloading private Python and installing the selected training dependencies. Details are written to setup.log.'
+            if($ProfileId -eq 'nvidia') {
+                Invoke-TrainingInstall -Executable $uv -Arguments @('sync','--frozen','--no-dev','--python',$lock.python,'--link-mode','copy')
+            } else {
+                # Upstream uv.lock is CUDA-only. Use pinned upstream XPU requirements
+                # with explicit backend constraints; never sync the CUDA project here.
+                if(-not(Test-Path $python)){Invoke-TrainingInstall -Executable $uv -Arguments @('venv','--python',$lock.python,$venv)}
+                $constraints=Join-Path $root 'backend-constraints.txt'
+                [IO.File]::WriteAllText($constraints,"torch==$($profile.torch)`ntorchvision==$($profile.torchvision)`n",(New-Object Text.UTF8Encoding($false)))
+                if($ProfileId -eq 'intel-xpu') {
+                    Invoke-TrainingInstall -Executable $uv -Arguments @('pip','install','--python',$python,'--link-mode','copy','-r','requirements_ipex_xpu.txt','-c',$constraints)
+                } else {
+                    Invoke-TrainingInstall -Executable $uv -Arguments @('pip','install','--python',$python,'--link-mode','copy',('torch=='+$profile.torch),('torchvision=='+$profile.torchvision),'--index-url',$profile.index)
+                    Invoke-TrainingInstall -Executable $uv -Arguments @('pip','install','--python',$python,'--link-mode','copy','-r','requirements.txt','tensorboard==2.15.2','tensorflow==2.15.1','onnxruntime==1.22.0','-c',$constraints,'--extra-index-url',$profile.index)
+                }
+            }
+            Write-Output 'Checking training imports, selected device, backward pass and optimizer update...'
+            $null=Invoke-SdwNativeCommand -FilePath $python -Arguments @('-c','import gradio,accelerate,transformers,kohya_gui') -WorkingDirectory $checkout -LogPath $log
+            $null=Invoke-SdwNativeCommand -FilePath $python -Arguments @((Join-Path $checkout 'sd-scripts\train_network.py'),'--help') -WorkingDirectory $checkout -LogPath $log
+            Invoke-TrainingInstall -Executable $uv -Arguments @('pip','check','--python',$python)
+            $resolved=Invoke-SdwNativeCommand -FilePath $uv -Arguments @('pip','freeze','--python',$python) -WorkingDirectory $checkout -LogPath $log
+            [IO.File]::WriteAllText((Join-Path $root 'requirements-resolved.txt'),$resolved.StandardOutput,(New-Object Text.UTF8Encoding($false)))
+            $check=Invoke-SdwNativeCommand -FilePath $python -Arguments @((Join-Path $repo 'scripts\probe-training-device.py'),$profile.backend) -WorkingDirectory $checkout -LogPath $log
             Write-Output $check.StandardOutput
             $null=Write-TrainingDefaults
-            Write-SdwJsonAtomic -Path $readyPath -Value @{commit=$lock.kohya.commit;root=$root;checkedAt=[DateTime]::UtcNow.ToString('o')}
+            Write-SdwJsonAtomic -Path $readyPath -Value @{commit=$lock.kohya.commit;root=$root;profileId=$ProfileId;probe=$check.StandardOutput;checkedAt=[DateTime]::UtcNow.ToString('o')}
+            if(-not $PrepareOnly){Write-SdwJsonAtomic -Path $selectionPath -Value @{profileId=$ProfileId}}
             Write-Output 'Training environment ready. Open the training UI and select the LoRA tab. No training has been started.'
         } finally {if($guard){$guard.Dispose()}}
         exit 0
     }
     if(-not(Test-TrainingReady)){throw 'First click Configure training environment. See training logs if setup failed.'}
+    $null=Invoke-SdwNativeCommand -FilePath $python -Arguments @((Join-Path $repo 'scripts\probe-training-device.py'),$profile.backend) -WorkingDirectory $checkout -LogPath $log
     $p=Get-TrainingProcess
     if(-not $p){
-        if(-not(Test-SdwPortAvailable -Port $lock.port)){throw "Port $($lock.port) is occupied by another process; nothing was stopped."}
+        if(-not(Test-SdwPortAvailable -Port $profile.port)){throw "Port $($profile.port) is occupied by another process; nothing was stopped."}
         $token=[guid]::NewGuid().ToString()
         $config=Write-TrainingDefaults
-        $args=@((Join-Path $repo 'scripts\training-host.py'),'--owner-token',$token,'--checkout',$checkout,'--config',$config,'--listen','127.0.0.1','--server_port',[string]$lock.port,'--do_not_share','--do_not_use_shell','--noverify')
+        $args=@((Join-Path $repo 'scripts\training-host.py'),'--owner-token',$token,'--checkout',$checkout,'--config',$config,'--listen','127.0.0.1','--server_port',[string]$profile.port,'--do_not_share','--do_not_use_shell','--noverify')
         $p=Start-Process -FilePath $python -ArgumentList (Join-SdwCommandLine -Arguments $args) -WorkingDirectory $checkout -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $root 'logs\gui.log') -RedirectStandardError (Join-Path $root 'logs\gui-error.log')
         Write-SdwJsonAtomic -Path $statePath -Value @{pid=$p.Id;started=$p.StartTime.ToUniversalTime().ToString('o');token=$token}
     }
