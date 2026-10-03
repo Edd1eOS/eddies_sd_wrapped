@@ -100,7 +100,8 @@ public sealed class SdwProcessOutputPump
     $script:AllowedCommands = @(
         'setup', 'repair', 'start', 'stop', 'status', 'doctor', 'configure',
         'import-model', 'download-starter-model', 'open-ui', 'open-data',
-        'open-models', 'open-outputs', 'logs'
+        'open-models', 'open-outputs', 'logs',
+        'training-setup', 'training-open', 'training-stop', 'training-status', 'training-data', 'training-output', 'training-logs'
     )
     $script:OutputQueue = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]'
     $script:LogHistory = New-Object 'System.Collections.Generic.Queue[string]'
@@ -379,7 +380,8 @@ catch {
     $controlNames = @('stateLabel','profileLabel','gpuLabel','dataRootLabel','modelCountLabel','urlLink',
         'operationLabel','actionGroup','logBox','setupButton','startButton','stopButton','openUiButton',
         'importButton','downloadButton','doctorButton','settingsButton','openDataButton','openModelsButton',
-        'openOutputsButton','openLogsButton','HeroTitle','HeroDescription','StatusPillText','LogExpander','BusyBar')
+        'openOutputsButton','openLogsButton','HeroTitle','HeroDescription','StatusPillText','LogExpander','BusyBar',
+        'trainingSetupButton','trainingOpenButton','trainingStopButton','trainingDataButton','trainingOutputButton','trainingLogsButton')
     foreach ($name in $controlNames) { Set-Variable -Name $name -Value $window.FindName($name) -Scope Script }
     $toolTip = New-Object PSObject
     $toolTip | Add-Member -MemberType ScriptMethod -Name SetToolTip -Value {
@@ -443,6 +445,9 @@ catch {
         $settingsButton.IsEnabled = $true
         $openDataButton.IsEnabled = -not $busy
         $openModelsButton.IsEnabled = -not $busy
+        foreach ($trainingControl in @('trainingSetupButton','trainingOpenButton','trainingStopButton','trainingDataButton','trainingOutputButton','trainingLogsButton')) {
+            $window.FindName($trainingControl).IsEnabled = -not $busy
+        }
         $openOutputsButton.IsEnabled = -not $busy
         $openLogsButton.IsEnabled = -not $busy
         $urlLink.IsEnabled = (-not $busy -and $healthy -and (Test-SdwLoopbackUrl $url))
@@ -1196,6 +1201,20 @@ catch {
     })
     $openOutputsButton.Add_Click({ Queue-SdwAction -Command 'open-outputs' -Parameters ([ordered]@{}) -DisplayName '打开输出管理' })
     $openLogsButton.Add_Click({ Queue-SdwAction -Command 'logs' -Parameters ([ordered]@{}) -DisplayName '查看运行日志' })
+    $trainingSetupButton.Add_Click({
+        if ([System.Windows.Forms.MessageBox]::Show($form, '将联网下载独立 Python 和 Kohya 训练依赖（数 GB），全部保存在本项目 data/training。不会修改出图环境，也不会自动开始训练。继续吗？', '配置 LoRA 训练环境', 'YesNo', 'Question') -eq 'Yes') {
+            Queue-SdwAction -Command 'training-setup' -Parameters ([ordered]@{}) -DisplayName '配置独立训练环境'
+        }
+    })
+    $trainingOpenButton.Add_Click({ Queue-SdwAction -Command 'training-open' -Parameters ([ordered]@{}) -DisplayName '打开 LoRA 训练界面（不会自动训练）' })
+    $trainingDataButton.Add_Click({ Queue-SdwAction -Command 'training-data' -Parameters ([ordered]@{}) -DisplayName '打开训练素材' })
+    $trainingOutputButton.Add_Click({ Queue-SdwAction -Command 'training-output' -Parameters ([ordered]@{}) -DisplayName '打开训练结果' })
+    $trainingLogsButton.Add_Click({ Queue-SdwAction -Command 'training-logs' -Parameters ([ordered]@{}) -DisplayName '打开训练日志' })
+    $trainingStopButton.Add_Click({
+        if ([System.Windows.Forms.MessageBox]::Show($form, '这会关闭训练服务和它启动的训练任务。未保存的训练进度会丢失，已保存的模型不会删除。确定停止吗？', '停止训练服务', 'YesNo', 'Warning') -eq 'Yes') {
+            Queue-SdwAction -Command 'training-stop' -Parameters ([ordered]@{}) -DisplayName '停止训练服务'
+        }
+    })
     $settingsButton.Add_Click({
         if (Test-SdwActionBusy) {
             Show-SdwBusyNotice

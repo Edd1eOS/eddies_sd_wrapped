@@ -37,8 +37,10 @@ Write-Host 'Stable Diffusion Workbench local test suite'
 Write-Host ("PowerShell {0}; repository {1}" -f $PSVersionTable.PSVersion, $repositoryRoot)
 
 $parseErrors = New-Object Collections.Generic.List[object]
-$powerShellFiles = @(Get-ChildItem -LiteralPath $repositoryRoot -Recurse -File | Where-Object {
-    $_.Extension -eq '.ps1' -or $_.Extension -eq '.psm1'
+$powerShellFiles = @(foreach ($folder in @('src','scripts','launcher','tests')) {
+    Get-ChildItem -LiteralPath (Join-Path $repositoryRoot $folder) -Recurse -File | Where-Object {
+        $_.Extension -eq '.ps1' -or $_.Extension -eq '.psm1'
+    }
 })
 foreach ($file in $powerShellFiles) {
     $tokens = $null
@@ -52,6 +54,7 @@ Assert-SdwTest ($parseErrors.Count -eq 0) 'all PowerShell files parse without er
 
 $jsonFiles = @(
     'configs\upstream-lock.json',
+    'configs\training-lock.json',
     'profiles\windows-nvidia-standard.json',
     'profiles\windows-nvidia-blackwell.json',
     'asset-manifests\starter-models.json'

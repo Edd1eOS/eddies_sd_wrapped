@@ -58,5 +58,21 @@ foreach ($name in @('setupButton','importButton','downloadButton','settingsButto
     if ($source -notmatch ('\$' + $name + '\.Add_Click')) { throw "Missing action: $name" }
 }
 if ([Windows.Shell.WindowChrome]::GetWindowChrome($window).ResizeBorderThickness.Left -lt 1) { throw 'Resize chrome missing' }
+$script:PendingAction = $null
+Update-SdwButtons
+foreach ($pair in @(@('trainingOpenButton','training-open'),@('trainingDataButton','training-data'),@('trainingOutputButton','training-output'),@('trainingLogsButton','training-logs'))) {
+    $name=$pair[0]
+    $control=$window.FindName($name)
+    if (-not $control) { throw "Missing training button: $name" }
+    Set-Variable -Name $name -Value $control -Scope Script
+    $binding=[regex]::Match($source, '(?m)^\s*\$'+$name+'\.Add_Click\(\{[^\r\n]+\}\)')
+    . ([scriptblock]::Create($binding.Value))
+    $script:Captured=$null
+    $control.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Button]::ClickEvent))
+    if($script:Captured -ne $pair[1]) { throw "Wrong training command: $name" }
+}
+foreach($name in @('trainingSetupButton','trainingStopButton')) {
+    if(-not $window.FindName($name) -or $source -notmatch ('\$'+$name+'\.Add_Click')){throw "Missing guarded training action: $name"}
+}
 $window.Close()
 Write-Output 'PASS: WPF controls, window chrome, eight states, 24 lifecycle clicks, busy feedback, and all maintenance action bindings.'

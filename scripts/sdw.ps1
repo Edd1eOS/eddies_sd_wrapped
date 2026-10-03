@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('setup', 'repair', 'start', 'stop', 'status', 'doctor', 'configure', 'import-model', 'download-starter-model', 'open-ui', 'open-data', 'open-models', 'open-outputs', 'logs')]
+    [ValidateSet('setup', 'repair', 'start', 'stop', 'status', 'doctor', 'configure', 'import-model', 'download-starter-model', 'open-ui', 'open-data', 'open-models', 'open-outputs', 'logs', 'training-setup', 'training-open', 'training-stop', 'training-status', 'training-data', 'training-output', 'training-logs')]
     [string]$Command,
     [string]$DataRoot,
     [ValidateRange(0, 65535)][int]$Port = 0,
@@ -45,6 +45,10 @@ function Write-HumanResult {
 }
 
 try {
+    if ($Command.StartsWith('training-')) {
+        & (Join-Path $PSScriptRoot 'training.ps1') -Command $Command -DataRoot $DataRoot -Json:$Json
+        exit $LASTEXITCODE
+    }
     switch ($Command) {
         'setup' {
             if ($Json) {

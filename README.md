@@ -16,6 +16,8 @@ cd eddies_sd_wrapped
 
 首次：一键配置运行环境 → 添加模型 → 打开生成界面。环境在项目 `data/`，模型在 `Models/`，结果在 `Outputs/`。
 
+LoRA 训练：配置训练环境 → 打开训练界面 → 选择 LoRA 页。训练前停止出图引擎；素材在 `datasets/lora/`，训练结果在 `training-runs/`。
+
 ## 目录
 
 - `configs/`：可提交的默认配置和配置模板

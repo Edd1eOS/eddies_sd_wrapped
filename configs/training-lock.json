@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "python": "3.10.11",
+  "port": 7861,
+  "uv": {
+    "url": "https://files.pythonhosted.org/packages/af/14/0f07d0b2e561548b4e3006208480a5fce8cdaae5247d85efbfb56e8e596b/uv-0.9.5-py3-none-win_amd64.whl",
+    "size": 21404719,
+    "sha256": "48a12390421f91af8a8993cf15c38297c0bb121936046286e287975b2fbf1789",
+    "license": "MIT OR Apache-2.0"
+  },
+  "kohya": {
+    "commit": "45088f04af78e11cec5407ff4652ea3ed2c14422",
+    "url": "https://codeload.github.com/bmaltais/kohya_ss/zip/45088f04af78e11cec5407ff4652ea3ed2c14422",
+    "size": 1876617,
+    "sha256": "74e51d7491e56e80087a2a7ba590adf8ad4e99d250c2316f68f268bf8016f557",
+    "license": "Apache-2.0"
+  },
+  "scripts": {
+    "commit": "6721028c79ee85a78b3a06dfd8954dae310a1cce",
+    "url": "https://codeload.github.com/kohya-ss/sd-scripts/zip/6721028c79ee85a78b3a06dfd8954dae310a1cce",
+    "size": 6166498,
+    "sha256": "66ef4815b98f7cb35542f5e08fd75a33c92a6aca3d0dc09c2fa7a956d035e325",
+    "license": "Apache-2.0"
+  }
+}

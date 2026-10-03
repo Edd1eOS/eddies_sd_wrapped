@@ -136,8 +136,8 @@
           <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,10,0">
             <StackPanel>
               <TextBlock Text="模型管理" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-              <TextBlock Text="选择生成图片的主模型与风格" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
-              <TextBlock Text="Checkpoint 是主模型；VAE 负责画面编解码，LoRA 可以补充风格和角色。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
+              <TextBlock Text="图片风格与模型有关" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+              <TextBlock Text="在这里配置模型，但是建议按需下载，因为实在太大了QAQ。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
               <WrapPanel>
                 <Button x:Name="openModelsButton" Content="模型管理" Style="{StaticResource CardButton}" Margin="0,16,8,0" ToolTip="打开模型文件夹，查看各类模型应该放在哪里。"/>
                 <Button x:Name="importButton" Content="添加模型" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="选择已有的 .safetensors 文件，复制到模型目录。"/>
@@ -148,21 +148,36 @@
           <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0">
             <StackPanel>
               <TextBlock Text="输出管理" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-              <TextBlock Text="找到已经生成的图片" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
-              <TextBlock Text="打开本工作台的输出文件夹。如果在 WebUI 里另设了保存位置，请以该设置为准。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
+              <TextBlock Text="默认路径，但是可以在webui改" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+              <TextBlock Text="一般来说不要改默认设置就不会走丢啦。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
               <Button x:Name="openOutputsButton" Content="输出管理" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="查看默认输出目录，不会移动或删除已有图片。"/>
             </StackPanel>
           </Border>
           <Border Grid.Column="2" Style="{StaticResource Card}" Margin="10,0,0,0">
             <StackPanel>
               <TextBlock Text="环境维护" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
-              <TextBlock Text="安装、修复与问题排查" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
-              <TextBlock Text="引擎使用独立的 Python 环境，不修改系统 Python。遇到问题时可以先查看日志。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
+              <TextBlock Text="初次安装点这里^_^" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+              <TextBlock Text="独立的python环境，不干扰本地配置" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
               <Button x:Name="setupButton" Content="一键配置 / 修复运行环境" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="自动下载并配置 Python、引擎和依赖，全部放在项目内。首次需要联网，不修改系统 Python。"/>
               <Button x:Name="openLogsButton" Content="查看运行日志" Style="{StaticResource CardButton}" Margin="0,10,0,0"/>
             </StackPanel>
           </Border>
         </Grid>
+        <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+          <StackPanel>
+            <TextBlock Text="LoRA 训练" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+            <TextBlock Text="用一组图片，教会模型认识你的角色或画风" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+            <TextBlock Text="首次配置独立的 Kohya 环境，然后打开训练界面的 LoRA 页。素材放 datasets/lora，结果放 training-runs；确认效果后再添加到 Models/Lora。开始训练前，请停止出图引擎以释放显存。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
+            <WrapPanel>
+              <Button x:Name="trainingSetupButton" Content="配置训练环境" Style="{StaticResource CardButton}" Margin="0,16,8,0" ToolTip="自动下载独立 Python 和 Kohya 依赖，需要联网及额外磁盘空间；不改变出图环境。"/>
+              <Button x:Name="trainingOpenButton" Content="打开训练界面" Style="{StaticResource CardButton}" Margin="0,16,8,0" ToolTip="打开本机 Kohya 界面，不会自动开始训练。"/>
+              <Button x:Name="trainingDataButton" Content="训练素材" Style="{StaticResource CardButton}" Margin="0,16,8,0"/>
+              <Button x:Name="trainingOutputButton" Content="训练结果" Style="{StaticResource CardButton}" Margin="0,16,8,0"/>
+              <Button x:Name="trainingLogsButton" Content="训练日志" Style="{StaticResource CardButton}" Margin="0,16,8,0"/>
+              <Button x:Name="trainingStopButton" Content="停止训练服务" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="关闭训练界面和它启动的任务；未保存的进度会丢失。"/>
+            </WrapPanel>
+          </StackPanel>
+        </Border>
         <Border Style="{StaticResource Card}" Margin="0,20,0,0" Padding="20,16">
           <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
