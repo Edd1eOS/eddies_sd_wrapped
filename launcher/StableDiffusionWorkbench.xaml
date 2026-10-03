@@ -1,0 +1,193 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Stable Diffusion Workbench" Width="1160" Height="820" MinWidth="1040" MinHeight="680"
+        WindowStyle="None" ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen" Background="#E4F1E8" FontFamily="Segoe UI"
+        TextOptions.TextFormattingMode="Display" UseLayoutRounding="True">
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="82" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="12" UseAeroCaptionButtons="False"/>
+  </shell:WindowChrome.WindowChrome>
+  <Window.Resources>
+    <SolidColorBrush x:Key="Ink" Color="#173E32"/>
+    <SolidColorBrush x:Key="Muted" Color="#416455"/>
+    <SolidColorBrush x:Key="Line" Color="#BFFFFFFF"/>
+    <SolidColorBrush x:Key="Accent" Color="#267557"/>
+    <Style x:Key="PrimaryButton" TargetType="Button">
+      <Setter Property="Foreground" Value="#173E32"/>
+      <Setter Property="Background" Value="#BCEDAD"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="#AFFFFFFF"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="22,12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="22" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.86"/><Setter TargetName="Root" Property="BorderBrush" Value="#267557"/></Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#267557"/><Setter TargetName="Root" Property="BorderThickness" Value="2"/></Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.7"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.45"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+      <Setter Property="Foreground" Value="#24533F"/>
+      <Setter Property="Background" Value="#60FFFFFF"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Padding" Value="18,11"/>
+    </Style>
+    <Style x:Key="CardButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="Padding" Value="15,9"/>
+      <Setter Property="Margin" Value="0,14,0,0"/>
+    </Style>
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background">
+        <Setter.Value><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#60FFFFFF" Offset="0"/><GradientStop Color="#30FFFFFF" Offset="1"/></LinearGradientBrush></Setter.Value>
+      </Setter>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="28"/>
+      <Setter Property="Effect"><Setter.Value><DropShadowEffect Color="#376D53" BlurRadius="28" ShadowDepth="7" Opacity="0.14"/></Setter.Value></Setter>
+      <Setter Property="Padding" Value="22"/>
+    </Style>
+  </Window.Resources>
+
+  <Grid ClipToBounds="True">
+    <Grid.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#ECF5DA" Offset="0"/><GradientStop Color="#ACDDC4" Offset="0.53"/><GradientStop Color="#D2EBC8" Offset="1"/></LinearGradientBrush></Grid.Background>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="82"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <!-- Soft-edged colored shapes remain visible through translucent glass surfaces. -->
+    <Canvas Grid.RowSpan="3" IsHitTestVisible="False" ClipToBounds="True">
+      <Ellipse Width="370" Height="370" Canvas.Left="40" Canvas.Top="10">
+        <Ellipse.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#66CFAB" Offset="0"/><GradientStop Color="#9AE8CE" Offset="1"/></LinearGradientBrush></Ellipse.Fill>
+        <Ellipse.Effect><BlurEffect Radius="24"/></Ellipse.Effect>
+      </Ellipse>
+      <Ellipse Width="290" Height="290" Canvas.Left="770" Canvas.Top="180" Fill="#D5F495">
+        <Ellipse.Effect><BlurEffect Radius="26"/></Ellipse.Effect>
+      </Ellipse>
+      <Ellipse Width="420" Height="420" Canvas.Left="480" Canvas.Top="430">
+        <Ellipse.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#80CFA4" Offset="0"/><GradientStop Color="#B6E7CA" Offset="1"/></LinearGradientBrush></Ellipse.Fill>
+        <Ellipse.Effect><BlurEffect Radius="30"/></Ellipse.Effect>
+      </Ellipse>
+    </Canvas>
+
+    <Border Grid.Row="0" Background="#45FFFFFF" BorderBrush="#BFFFFFFF" BorderThickness="0,0,0,1">
+      <Grid Margin="34,0">
+        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="Stable Diffusion Workbench" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+          <TextBlock Text="本地图片生成工作站 · AUTOMATIC1111" Margin="0,3,0,0" FontSize="13" Foreground="{StaticResource Muted}"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+          <Border x:Name="StatusPill" Background="#FFF4D8" CornerRadius="14" Padding="12,6" Margin="0,0,12,0">
+            <TextBlock x:Name="StatusPillText" Text="正在检查" MaxWidth="150" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" FontSize="13" FontWeight="SemiBold" Foreground="#855F00"/>
+          </Border>
+          <Button x:Name="settingsButton" Style="{StaticResource SecondaryButton}" Content="环境与端口" ToolTip="运行环境固定在本项目 data 文件夹内；这里可修改本地端口。"/>
+          <Button x:Name="MinimizeWindowButton" Style="{StaticResource SecondaryButton}" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Padding="0" Margin="12,0,4,0" ToolTip="最小化" AutomationProperties.Name="最小化窗口"/>
+          <Button x:Name="MaximizeWindowButton" Style="{StaticResource SecondaryButton}" Content="&#xE922;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Padding="0" Margin="0,0,4,0" ToolTip="最大化 / 还原" AutomationProperties.Name="最大化或还原窗口"/>
+          <Button x:Name="CloseWindowButton" Style="{StaticResource SecondaryButton}" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Padding="0" ToolTip="关闭启动器" AutomationProperties.Name="关闭启动器"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="34,26,34,22">
+        <Border Style="{StaticResource Card}" CornerRadius="32" Padding="30" Margin="0,0,0,20">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center" Margin="0,0,28,0">
+              <TextBlock x:Name="HeroTitle" Text="点击下面的按钮打开 WebUI" FontSize="29" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource Ink}"/>
+              <TextBlock x:Name="HeroDescription" Text="正在检查本地引擎和模型，请稍候。" FontSize="15" LineHeight="24" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
+              <WrapPanel Margin="0,24,0,0">
+                <Button x:Name="openUiButton" Content="打开生成界面" Style="{StaticResource PrimaryButton}" Margin="0,0,10,10"/>
+                <Button x:Name="startButton" Content="启动引擎" Style="{StaticResource SecondaryButton}" Margin="0,0,10,10"/>
+                <Button x:Name="stopButton" Content="停止引擎" Style="{StaticResource SecondaryButton}" Margin="0,0,0,10"/>
+              </WrapPanel>
+              <TextBlock x:Name="stateLabel" Text="正在检查…" Foreground="{StaticResource Muted}" TextWrapping="Wrap" FontSize="12"/>
+            </StackPanel>
+            <Border Grid.Column="1" Background="#45FFFFFF" CornerRadius="24" BorderThickness="1" BorderBrush="#D9FFFFFF" Padding="20">
+              <StackPanel>
+                <TextBlock Text="当前设备" FontSize="12" FontWeight="SemiBold" Foreground="#3C7057"/>
+                <TextBlock x:Name="gpuLabel" Text="正在检测显卡…" Margin="0,7,0,0" TextWrapping="Wrap" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                <Border Height="1" Background="#AFFFFFFF" Margin="0,15"/>
+                <TextBlock Text="项目内运行环境" FontSize="12" FontWeight="SemiBold" Foreground="#3C7057"/>
+                <TextBlock x:Name="dataRootLabel" Text="—" TextWrapping="Wrap" Margin="0,7,0,0" FontSize="12" Foreground="{StaticResource Muted}"/>
+                <Button x:Name="openDataButton" Content="打开环境文件夹" Style="{StaticResource CardButton}" FontSize="12" Padding="12,7" ToolTip="这里只放运行环境和配置；模型在项目 Models，生成结果在 Outputs。"/>
+              </StackPanel>
+            </Border>
+          </Grid>
+        </Border>
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,10,0">
+            <StackPanel>
+              <TextBlock Text="模型管理" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+              <TextBlock Text="选择生成图片的主模型与风格" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+              <TextBlock Text="Checkpoint 是主模型；VAE 负责画面编解码，LoRA 可以补充风格和角色。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
+              <WrapPanel>
+                <Button x:Name="openModelsButton" Content="模型管理" Style="{StaticResource CardButton}" Margin="0,16,8,0" ToolTip="打开模型文件夹，查看各类模型应该放在哪里。"/>
+                <Button x:Name="importButton" Content="添加模型" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="选择已有的 .safetensors 文件，复制到模型目录。"/>
+              </WrapPanel>
+              <Button x:Name="downloadButton" Content="下载通用基础模型" Style="{StaticResource CardButton}" Margin="0,10,0,0" ToolTip="下载 SD 1.5 基础模型；需要联网并确认许可证，不是启动的必选步骤。"/>
+            </StackPanel>
+          </Border>
+          <Border Grid.Column="1" Style="{StaticResource Card}" Margin="10,0">
+            <StackPanel>
+              <TextBlock Text="输出管理" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+              <TextBlock Text="找到已经生成的图片" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+              <TextBlock Text="打开本工作台的输出文件夹。如果在 WebUI 里另设了保存位置，请以该设置为准。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
+              <Button x:Name="openOutputsButton" Content="输出管理" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="查看默认输出目录，不会移动或删除已有图片。"/>
+            </StackPanel>
+          </Border>
+          <Border Grid.Column="2" Style="{StaticResource Card}" Margin="10,0,0,0">
+            <StackPanel>
+              <TextBlock Text="环境维护" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+              <TextBlock Text="安装、修复与问题排查" Margin="0,7,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+              <TextBlock Text="引擎使用独立的 Python 环境，不修改系统 Python。遇到问题时可以先查看日志。" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13" LineHeight="20" Foreground="{StaticResource Muted}"/>
+              <Button x:Name="setupButton" Content="一键配置 / 修复运行环境" Style="{StaticResource CardButton}" Margin="0,16,0,0" ToolTip="自动下载并配置 Python、引擎和依赖，全部放在项目内。首次需要联网，不修改系统 Python。"/>
+              <Button x:Name="openLogsButton" Content="查看运行日志" Style="{StaticResource CardButton}" Margin="0,10,0,0"/>
+            </StackPanel>
+          </Border>
+        </Grid>
+        <Border Style="{StaticResource Card}" Margin="0,20,0,0" Padding="20,16">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,18,0">
+              <WrapPanel>
+                <TextBlock Text="工作台状态" FontWeight="SemiBold" Foreground="{StaticResource Ink}" Margin="0,0,16,6"/>
+                <TextBlock x:Name="modelCountLabel" Text="—" Foreground="{StaticResource Muted}"/>
+                <TextBlock Text=" 个主模型" Foreground="{StaticResource Muted}" Margin="0,0,16,6"/>
+                <Button x:Name="urlLink" Content="—" Style="{StaticResource SecondaryButton}" Padding="8,1" FontSize="12" IsEnabled="False" Margin="0,0,0,6"/>
+              </WrapPanel>
+              <TextBlock x:Name="profileLabel" Text="—" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource Muted}"/>
+              <TextBlock x:Name="operationLabel" Text="正在读取状态…" TextWrapping="Wrap" Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource Accent}"/>
+              <TextBlock x:Name="actionGroup" Text="" TextWrapping="Wrap" FontSize="12" Foreground="#855F00"/>
+            </StackPanel>
+            <Button x:Name="doctorButton" Grid.Column="1" Content="检查问题" Style="{StaticResource SecondaryButton}" VerticalAlignment="Center" ToolTip="检查运行环境、模型和本地服务，详情会显示在运行日志中。"/>
+          </Grid>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+    <Expander x:Name="LogExpander" Grid.Row="2" Header="运行详情 · 最多 600 行" Foreground="#345B49" Background="#66FFFFFF" BorderBrush="#BFFFFFFF" BorderThickness="0,1,0,0" Padding="34,12">
+      <Grid Height="155" Margin="0,8,0,0">
+        <Grid.RowDefinitions><RowDefinition Height="4"/><RowDefinition/></Grid.RowDefinitions>
+        <ProgressBar x:Name="BusyBar" IsIndeterminate="True" Visibility="Collapsed" Foreground="#267557"/>
+        <TextBox x:Name="logBox" Grid.Row="1" Margin="0,10,0,0" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#96FFFFFF" Foreground="#345B49" BorderThickness="0" FontFamily="Consolas" FontSize="12" Padding="12"/>
+      </Grid>
+    </Expander>
+  </Grid>
+</Window>

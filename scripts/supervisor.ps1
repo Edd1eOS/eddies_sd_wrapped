@@ -67,7 +67,7 @@ function Write-StateAtomic {
 }
 
 function Ensure-SdwUiSettings {
-    param([Parameter(Mandatory = $true)][string]$UserDataRoot)
+    param([Parameter(Mandatory = $true)][string]$UserDataRoot, [string]$OutputsRoot)
 
     $settingsPath = Join-Path $UserDataRoot 'config.json'
     $settings = New-Object PSObject
@@ -102,6 +102,14 @@ function Ensure-SdwUiSettings {
         $settings.quicksettings_list = $quickSettings
     }
 
+    if ($OutputsRoot) {
+        foreach ($entry in @{ outdir_txt2img_samples='txt2img-images'; outdir_img2img_samples='img2img-images'; outdir_extras_samples='extras-images'; outdir_txt2img_grids='txt2img-grids'; outdir_img2img_grids='img2img-grids'; outdir_save='saved' }.GetEnumerator()) {
+            $existing = $settings.PSObject.Properties[$entry.Key]
+            if ($null -eq $existing -or [string]::IsNullOrWhiteSpace([string]$existing.Value) -or -not [IO.Path]::IsPathRooted([string]$existing.Value)) {
+                $settings | Add-Member -NotePropertyName $entry.Key -NotePropertyValue (Join-Path $OutputsRoot $entry.Value) -Force
+            }
+        }
+    }
     $temporaryPath = Join-Path $UserDataRoot ('.config.{0}.tmp' -f [Guid]::NewGuid().ToString('N'))
     $backupPath = Join-Path $UserDataRoot ('.config.{0}.bak' -f [Guid]::NewGuid().ToString('N'))
     $encoding = New-Object Text.UTF8Encoding($false)
@@ -189,12 +197,14 @@ foreach ($argument in $profileArguments) {
 
 $userDataRoot = Join-Path $DataRoot 'userdata'
 if (-not (Test-Path -LiteralPath $userDataRoot)) { $null = New-Item -ItemType Directory -Path $userDataRoot -Force }
-$modelsRoot = Join-Path $userDataRoot 'models'
+Import-Module (Join-Path $RepositoryRoot 'src\StableDiffusionWorkbench.Core.psm1') -Force -DisableNameChecking
+$managedPaths = Get-SdwPaths -RepositoryRoot $RepositoryRoot -DataRoot $DataRoot
+$modelsRoot = $managedPaths.ModelsRoot
 $checkpointsRoot = Join-Path $modelsRoot 'Checkpoints'
 $vaeRoot = Join-Path $modelsRoot 'VAE'
 $loraRoot = Join-Path $modelsRoot 'Lora'
 $hypernetworksRoot = Join-Path $modelsRoot 'Hypernetworks'
-$embeddingsRoot = Join-Path $userDataRoot 'embeddings'
+$embeddingsRoot = $managedPaths.EmbeddingsRoot
 foreach ($managedDirectory in @($modelsRoot, $checkpointsRoot, $vaeRoot, $loraRoot, $hypernetworksRoot, $embeddingsRoot)) {
     if (-not (Test-Path -LiteralPath $managedDirectory -PathType Container)) {
         $null = New-Item -ItemType Directory -Path $managedDirectory -Force
@@ -205,7 +215,7 @@ if (-not (Test-Path -LiteralPath $logDirectory)) { $null = New-Item -ItemType Di
 $logEncoding = New-Object Text.UTF8Encoding($false)
 $script:LogWriter = New-Object IO.StreamWriter($LogPath, $true, $logEncoding)
 $script:LogWriter.AutoFlush = $true
-Ensure-SdwUiSettings -UserDataRoot $userDataRoot
+Ensure-SdwUiSettings -UserDataRoot $userDataRoot -OutputsRoot $managedPaths.OutputsRoot
 Write-LogLine -Stream 'supervisor' -Line 'Ensured checkpoint and VAE selectors are visible in A1111 quick settings.'
 
 $supervisorProcess = Get-Process -Id $PID
@@ -246,6 +256,7 @@ try {
         '--disable-extra-extensions',
         '--server-name', '127.0.0.1',
         '--data-dir', $userDataRoot,
+        '--models-dir', $modelsRoot,
         '--ckpt-dir', $checkpointsRoot,
         '--vae-dir', $vaeRoot,
         '--lora-dir', $loraRoot,

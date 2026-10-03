@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param()
+param([string]$PreviewPath, [int]$PreviewWidth = 1160, [int]$PreviewHeight = 820, [switch]$PreviewLogs, [switch]$LiveStatusPreview)
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
@@ -8,6 +8,7 @@ try {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
     Add-Type -AssemblyName System.Management
+    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
     if (-not ('SdwNativeMethods' -as [type])) {
         Add-Type -TypeDefinition @'
@@ -39,7 +40,7 @@ public sealed class SdwProcessOutputItem
 
 // DataReceived callbacks run on thread-pool threads where PowerShell has no
 // runspace. Keep those callbacks entirely in managed code and let the WinForms
-// timer consume this thread-safe queue on the UI thread.
+// dispatcher consume this thread-safe queue on the UI thread.
 public sealed class SdwProcessOutputPump
 {
     private readonly ConcurrentQueue<object> queue;
@@ -84,7 +85,7 @@ public sealed class SdwProcessOutputPump
     $script:RepositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     $script:CliPath = Join-Path $script:RepositoryRoot 'scripts\sdw.ps1'
     $script:WindowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $script:LauncherStateDirectory = Join-Path $env:LOCALAPPDATA 'StableDiffusionWorkbench.Launcher'
+    $script:LauncherStateDirectory = Join-Path $script:RepositoryRoot 'data\launcher'
     $script:LauncherStatePath = Join-Path $script:LauncherStateDirectory 'settings.json'
     $script:LauncherDataRoot = $null
     $script:LauncherSettingsWarning = $null
@@ -356,198 +357,36 @@ catch {
         $toolTip.SetToolTip($gpuLabel, $script:DetectedGpu)
     }
 
-    $script:LauncherDataRoot = Import-SdwLauncherSettings
+    # Each checkout owns its environment; do not inherit another installation's path.
+    $script:LauncherDataRoot = Join-Path $script:RepositoryRoot 'data'
     if ([string]::IsNullOrWhiteSpace($script:LauncherDataRoot)) {
         # Portable default: keep all large/local data beside the cloned launcher,
         # under a git-ignored directory. The user can change it at any time.
         $script:LauncherDataRoot = Join-Path $script:RepositoryRoot 'data'
     }
 
-    function New-SdwButton {
-        param(
-            [string]$Text,
-            [int]$Width = 132,
-            [System.Drawing.Color]$BackColor = [System.Drawing.Color]::White
-        )
-        $button = New-Object System.Windows.Forms.Button
-        $button.Text = $Text
-        $button.Width = $Width
-        $button.Height = 38
-        $button.Margin = New-Object System.Windows.Forms.Padding(0, 0, 10, 10)
-        $button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-        $button.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 211, 221)
-        $button.BackColor = $BackColor
-        $button.Cursor = [System.Windows.Forms.Cursors]::Hand
-        return $button
+    # Presentation only: keep the CLI, queue, settings and lifecycle handlers unchanged.
+    [xml]$xaml = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'StableDiffusionWorkbench.xaml') -Raw -Encoding UTF8
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader($xaml)))
+    $form = New-Object System.Windows.Forms.NativeWindow
+    $window.Add_SourceInitialized({ $form.AssignHandle(([Windows.Interop.WindowInteropHelper]::new($window)).Handle) })
+    $window.FindName('MinimizeWindowButton').Add_Click({ $window.WindowState = 'Minimized' })
+    $window.FindName('MaximizeWindowButton').Add_Click({
+        if ($window.WindowState -eq 'Maximized') { $window.WindowState = 'Normal' }
+        else { $window.WindowState = 'Maximized' }
+    })
+    $window.FindName('CloseWindowButton').Add_Click({ $window.Close() })
+    $controlNames = @('stateLabel','profileLabel','gpuLabel','dataRootLabel','modelCountLabel','urlLink',
+        'operationLabel','actionGroup','logBox','setupButton','startButton','stopButton','openUiButton',
+        'importButton','downloadButton','doctorButton','settingsButton','openDataButton','openModelsButton',
+        'openOutputsButton','openLogsButton','HeroTitle','HeroDescription','StatusPillText','LogExpander','BusyBar')
+    foreach ($name in $controlNames) { Set-Variable -Name $name -Value $window.FindName($name) -Scope Script }
+    $toolTip = New-Object PSObject
+    $toolTip | Add-Member -MemberType ScriptMethod -Name SetToolTip -Value {
+        param($control, [string]$text)
+        $control.ToolTip = $text
     }
-
-    function New-SdwValueLabel {
-        param([string]$Text = '—')
-        $label = New-Object System.Windows.Forms.Label
-        $label.Text = $Text
-        $label.Dock = [System.Windows.Forms.DockStyle]::Fill
-        $label.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
-        $label.AutoEllipsis = $true
-        $label.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55)
-        return $label
-    }
-
-    $form = New-Object System.Windows.Forms.Form
-    $form.Text = 'Stable Diffusion Workbench'
-    $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-    $form.Size = New-Object System.Drawing.Size(1120, 780)
-    $form.MinimumSize = New-Object System.Drawing.Size(980, 700)
-    $form.BackColor = [System.Drawing.Color]::FromArgb(246, 248, 251)
-    $form.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
-    $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
-
-    $rootLayout = New-Object System.Windows.Forms.TableLayoutPanel
-    $rootLayout.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $rootLayout.Padding = New-Object System.Windows.Forms.Padding(20, 16, 20, 18)
-    $rootLayout.ColumnCount = 1
-    $rootLayout.RowCount = 4
-    [void]$rootLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 67)))
-    [void]$rootLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 172)))
-    [void]$rootLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 180)))
-    [void]$rootLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100)))
-    $form.Controls.Add($rootLayout)
-
-    $headerPanel = New-Object System.Windows.Forms.Panel
-    $headerPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $titleLabel = New-Object System.Windows.Forms.Label
-    $titleLabel.Text = 'Stable Diffusion Workbench'
-    $titleLabel.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 18, [System.Drawing.FontStyle]::Bold)
-    $titleLabel.ForeColor = [System.Drawing.Color]::FromArgb(17, 24, 39)
-    $titleLabel.AutoSize = $true
-    $titleLabel.Location = New-Object System.Drawing.Point(0, 1)
-    $subtitleLabel = New-Object System.Windows.Forms.Label
-    $subtitleLabel.Text = '本地 AUTOMATIC1111 环境、模型和进程管理'
-    $subtitleLabel.ForeColor = [System.Drawing.Color]::FromArgb(107, 114, 128)
-    $subtitleLabel.AutoSize = $true
-    $subtitleLabel.Location = New-Object System.Drawing.Point(3, 39)
-    $operationLabel = New-Object System.Windows.Forms.Label
-    $operationLabel.Text = '正在读取状态…'
-    $operationLabel.AutoSize = $false
-    $operationLabel.Width = 440
-    $operationLabel.Height = 50
-    $operationLabel.Dock = [System.Windows.Forms.DockStyle]::Right
-    $operationLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
-    $operationLabel.AutoEllipsis = $true
-    $operationLabel.ForeColor = [System.Drawing.Color]::FromArgb(75, 85, 99)
-    $headerPanel.Controls.AddRange(@($titleLabel, $subtitleLabel, $operationLabel))
-    $rootLayout.Controls.Add($headerPanel, 0, 0)
-
-    $statusGroup = New-Object System.Windows.Forms.GroupBox
-    $statusGroup.Text = ' 当前状态 '
-    $statusGroup.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $statusGroup.Padding = New-Object System.Windows.Forms.Padding(14, 10, 14, 10)
-    $rootLayout.Controls.Add($statusGroup, 0, 1)
-
-    $statusLayout = New-Object System.Windows.Forms.TableLayoutPanel
-    $statusLayout.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $statusLayout.ColumnCount = 4
-    $statusLayout.RowCount = 4
-    [void]$statusLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute, 86)))
-    [void]$statusLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
-    [void]$statusLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute, 86)))
-    [void]$statusLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
-    1..4 | ForEach-Object {
-        [void]$statusLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25)))
-    }
-    $statusGroup.Controls.Add($statusLayout)
-
-    function Add-SdwStatusCaption {
-        param([string]$Text, [int]$Column, [int]$Row)
-        $caption = New-Object System.Windows.Forms.Label
-        $caption.Text = $Text
-        $caption.Dock = [System.Windows.Forms.DockStyle]::Fill
-        $caption.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
-        $caption.ForeColor = [System.Drawing.Color]::FromArgb(107, 114, 128)
-        $statusLayout.Controls.Add($caption, $Column, $Row)
-    }
-
-    Add-SdwStatusCaption '整体状态' 0 0
-    Add-SdwStatusCaption 'Profile' 2 0
-    Add-SdwStatusCaption 'GPU' 0 1
-    Add-SdwStatusCaption '存储位置' 0 2
-    Add-SdwStatusCaption '已安装模型' 0 3
-    Add-SdwStatusCaption '生成界面' 2 3
-
-    $stateLabel = New-SdwValueLabel '正在检查…'
-    $stateLabel.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9, [System.Drawing.FontStyle]::Bold)
-    $profileLabel = New-SdwValueLabel
-    $gpuLabel = New-SdwValueLabel $script:DetectedGpu
-    $dataRootLabel = New-SdwValueLabel
-    $modelCountLabel = New-SdwValueLabel
-    $urlLink = New-Object System.Windows.Forms.LinkLabel
-    $urlLink.Text = '—'
-    $urlLink.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $urlLink.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
-    $urlLink.AutoEllipsis = $true
-    $urlLink.LinkBehavior = [System.Windows.Forms.LinkBehavior]::HoverUnderline
-    $urlLink.Enabled = $false
-
-    $statusLayout.Controls.Add($stateLabel, 1, 0)
-    $statusLayout.Controls.Add($profileLabel, 3, 0)
-    $statusLayout.Controls.Add($gpuLabel, 1, 1)
-    $statusLayout.SetColumnSpan($gpuLabel, 3)
-    $statusLayout.Controls.Add($dataRootLabel, 1, 2)
-    $statusLayout.SetColumnSpan($dataRootLabel, 3)
-    $statusLayout.Controls.Add($modelCountLabel, 1, 3)
-    $statusLayout.Controls.Add($urlLink, 3, 3)
-
-    $actionGroup = New-Object System.Windows.Forms.GroupBox
-    $actionGroup.Text = ' 操作 '
-    $actionGroup.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $actionGroup.Padding = New-Object System.Windows.Forms.Padding(14, 12, 14, 8)
-    $rootLayout.Controls.Add($actionGroup, 0, 2)
-    $actionFlow = New-Object System.Windows.Forms.FlowLayoutPanel
-    $actionFlow.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $actionFlow.WrapContents = $true
-    $actionFlow.AutoScroll = $true
-    $actionFlow.FlowDirection = [System.Windows.Forms.FlowDirection]::LeftToRight
-    $actionGroup.Controls.Add($actionFlow)
-
-    $setupButton = New-SdwButton '准备 / 修复引擎' 154 ([System.Drawing.Color]::FromArgb(235, 242, 255))
-    $startButton = New-SdwButton '启动引擎' 104 ([System.Drawing.Color]::FromArgb(220, 252, 231))
-    $stopButton = New-SdwButton '停止引擎' 104 ([System.Drawing.Color]::FromArgb(254, 226, 226))
-    $openUiButton = New-SdwButton '打开生成界面' 146 ([System.Drawing.Color]::FromArgb(219, 234, 254))
-    $importButton = New-SdwButton '添加模型' 112
-    $downloadButton = New-SdwButton '下载通用基础模型' 166
-    $doctorButton = New-SdwButton '检查问题' 104
-    $settingsButton = New-SdwButton '更改存储位置' 142
-    $openDataButton = New-SdwButton '打开存储位置' 132
-    $openModelsButton = New-SdwButton '模型管理' 112
-    $openOutputsButton = New-SdwButton '输出管理' 112
-    $openLogsButton = New-SdwButton '查看运行日志' 132
-    $actionFlow.Controls.AddRange(@(
-        $setupButton, $startButton, $stopButton, $openUiButton, $importButton,
-        $downloadButton, $doctorButton, $settingsButton, $openDataButton,
-        $openModelsButton, $openOutputsButton, $openLogsButton
-    ))
-
-    $logGroup = New-Object System.Windows.Forms.GroupBox
-    $logGroup.Text = ' 运行日志（最多 600 行） '
-    $logGroup.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $logGroup.Padding = New-Object System.Windows.Forms.Padding(12, 10, 12, 12)
-    $rootLayout.Controls.Add($logGroup, 0, 3)
-    $logBox = New-Object System.Windows.Forms.RichTextBox
-    $logBox.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $logBox.ReadOnly = $true
-    $logBox.WordWrap = $false
-    $logBox.DetectUrls = $false
-    $logBox.BackColor = [System.Drawing.Color]::FromArgb(20, 25, 34)
-    $logBox.ForeColor = [System.Drawing.Color]::FromArgb(226, 232, 240)
-    $logBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
-    $logBox.Font = New-Object System.Drawing.Font('Consolas', 9)
-    $logGroup.Controls.Add($logBox)
-
-    $toolTip = New-Object System.Windows.Forms.ToolTip
-    if (-not [string]::IsNullOrWhiteSpace($script:LauncherDataRoot)) {
-        $dataRootLabel.Text = $script:LauncherDataRoot
-    }
-    $toolTip.SetToolTip($dataRootLabel, '引擎、模型和生成结果统一保存在这里')
-    $toolTip.SetToolTip($urlLink, '打开本地图片生成界面')
+    $dataRootLabel.Text = $script:LauncherDataRoot
 
     function Get-SdwNormalizedState {
         param([AllowNull()][object]$Summary)
@@ -584,27 +423,29 @@ catch {
         $stopped = (-not $running -and $state -ne 'starting')
 
         $actionGroup.Text = if ($busy) {
-            ' 操作（当前任务执行中；为避免安装或运行环境损坏，相关按钮暂时锁定） '
+            '当前任务执行中，请等待完成；相关维护操作暂不可用。'
         }
         else {
-            ' 操作 '
+            ''
         }
 
-        $setupButton.Enabled = (-not $busy -and $stopped)
+        $BusyBar.Visibility = if ($busy) { 'Visible' } else { 'Collapsed' }
+        if ($busy) { $LogExpander.IsExpanded = $true }
+        $setupButton.IsEnabled = (-not $busy -and $stopped)
         # The three primary lifecycle controls stay clickable. Their handlers explain
         # unmet prerequisites instead of hiding the reason behind a disabled button.
-        $startButton.Enabled = $true
-        $stopButton.Enabled = $true
-        $openUiButton.Enabled = $true
-        $importButton.Enabled = $true
-        $downloadButton.Enabled = $true
-        $doctorButton.Enabled = -not $busy
-        $settingsButton.Enabled = $true
-        $openDataButton.Enabled = -not $busy
-        $openModelsButton.Enabled = -not $busy
-        $openOutputsButton.Enabled = -not $busy
-        $openLogsButton.Enabled = -not $busy
-        $urlLink.Enabled = (-not $busy -and $healthy -and (Test-SdwLoopbackUrl $url))
+        $startButton.IsEnabled = $true
+        $stopButton.IsEnabled = $true
+        $openUiButton.IsEnabled = $true
+        $importButton.IsEnabled = $true
+        $downloadButton.IsEnabled = $true
+        $doctorButton.IsEnabled = -not $busy
+        $settingsButton.IsEnabled = $true
+        $openDataButton.IsEnabled = -not $busy
+        $openModelsButton.IsEnabled = -not $busy
+        $openOutputsButton.IsEnabled = -not $busy
+        $openLogsButton.IsEnabled = -not $busy
+        $urlLink.IsEnabled = (-not $busy -and $healthy -and (Test-SdwLoopbackUrl $url))
 
         if ($busy) {
             $busyText = if ([string]::IsNullOrWhiteSpace($script:ActiveDisplayName)) {
@@ -658,13 +499,27 @@ catch {
             $stateLabel.Text = $stateText
         }
         switch ($state) {
-            'running' { $stateLabel.ForeColor = [System.Drawing.Color]::FromArgb(22, 101, 52) }
-            'faulted' { $stateLabel.ForeColor = [System.Drawing.Color]::FromArgb(185, 28, 28) }
-            'stale' { $stateLabel.ForeColor = [System.Drawing.Color]::FromArgb(185, 28, 28) }
-            'starting' { $stateLabel.ForeColor = [System.Drawing.Color]::FromArgb(180, 83, 9) }
-            default { $stateLabel.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55) }
+            'running' { $stateLabel.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#166534') }
+            'faulted' { $stateLabel.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#b91c1c') }
+            'stale' { $stateLabel.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#b91c1c') }
+            'starting' { $stateLabel.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#b45309') }
+            default { $stateLabel.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#1f2937') }
         }
 
+        $StatusPillText.Text = $stateText
+        $StatusPillText.Foreground = $stateLabel.Foreground
+        $pillColor = if ($state -in @('ready','running')) { '#DCFCE7' }
+                     elseif ($state -in @('stale','faulted')) { '#FCE6DF' }
+                     else { '#FFF4D8' }
+        $window.FindName('StatusPill').Background = [Windows.Media.BrushConverter]::new().ConvertFromString($pillColor)
+        switch ($state) {
+            'running' { $HeroTitle.Text = '创作界面已经准备好'; $HeroDescription.Text = '本地引擎正在运行，点击下面的按钮打开 WebUI。' }
+            'ready' { $HeroTitle.Text = '点击下面的按钮打开 WebUI'; $HeroDescription.Text = '本地离线运行的图片工作站，环境与模型已就绪。' }
+            'starting' { $HeroTitle.Text = '正在启动图片引擎'; $HeroDescription.Text = '第一次加载模型可能需要一点时间，进度可在运行详情中查看。' }
+            'missingmodel' { $HeroTitle.Text = '运行环境已就绪，添加模型即可'; $HeroDescription.Text = '把主模型放进项目的 Models / Checkpoints，或点击「添加模型」。' }
+            { $_ -in @('unconfigured', 'notinstalled') } { $HeroTitle.Text = '首次使用，一键配置运行环境'; $HeroDescription.Text = '自动准备独立 Python、依赖和图片引擎，全部放在项目内，无需手动配置 PATH。' }
+            default { $HeroTitle.Text = '查看当前工作台状态'; $HeroDescription.Text = '可以先点击「检查问题」，运行详情中会显示原因和处理建议。' }
+        }
         $profileName = [string](Get-SdwObjectValue $Summary @('profileName') '')
         $profileId = [string](Get-SdwObjectValue $Summary @('profileId', 'profile') '—')
         if ([string]::IsNullOrWhiteSpace($profileName)) {
@@ -680,7 +535,7 @@ catch {
         if ([string]::IsNullOrWhiteSpace($url)) {
             $url = '—'
         }
-        $urlLink.Text = $url
+        $urlLink.Content = $url
         $toolTip.SetToolTip($dataRootLabel, $dataRootLabel.Text)
         $toolTip.SetToolTip($urlLink, $url)
         Update-SdwButtons
@@ -1003,7 +858,7 @@ catch {
             Add-SdwLogLine "完成：$displayName"
             if ($command -eq 'start') {
                 $stateLabel.Text = '正在启动 / 等待健康检查'
-                $stateLabel.ForeColor = [System.Drawing.Color]::FromArgb(180, 83, 9)
+                $stateLabel.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#b45309')
                 $operationLabel.Text = '启动命令已完成，正在确认生成界面状态…'
             }
             else {
@@ -1048,16 +903,17 @@ catch {
         }
 
         $dialog = New-Object System.Windows.Forms.Form
-        $dialog.Text = if ($InstallMode) { '确认本地引擎存储位置' } else { '存储位置与端口' }
+        $dialog.Text = if ($InstallMode) { '一键配置运行环境' } else { '项目内环境与端口' }
         $dialog.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterParent
         $dialog.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
         $dialog.MaximizeBox = $false
         $dialog.MinimizeBox = $false
         $dialog.ClientSize = New-Object System.Drawing.Size(620, 220)
-        $dialog.Font = $form.Font
+        $dialog.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+        $dialog.BackColor = [System.Drawing.Color]::FromArgb(228, 241, 232)
 
         $dataCaption = New-Object System.Windows.Forms.Label
-        $dataCaption.Text = if ($InstallMode) { '存储位置（引擎、模型和生成结果）' } else { '存储位置' }
+        $dataCaption.Text = '项目内运行环境（模型在 Models，生成结果在 Outputs）'
         $dataCaption.Location = New-Object System.Drawing.Point(20, 22)
         $dataCaption.AutoSize = $true
         $dataText = New-Object System.Windows.Forms.TextBox
@@ -1071,10 +927,12 @@ catch {
             $currentDataRoot = Join-Path $script:RepositoryRoot 'data'
         }
         $dataText.Text = $currentDataRoot
+        $dataText.ReadOnly = $true
         $browseButton = New-Object System.Windows.Forms.Button
         $browseButton.Text = '浏览…'
         $browseButton.Location = New-Object System.Drawing.Point(504, 45)
         $browseButton.Size = New-Object System.Drawing.Size(94, 31)
+        $browseButton.Visible = $false
 
         $portCaption = New-Object System.Windows.Forms.Label
         $portCaption.Text = '本地端口（1024–65535）'
@@ -1091,7 +949,7 @@ catch {
         $portInput.Value = $parsedPort
 
         $saveButton = New-Object System.Windows.Forms.Button
-        $saveButton.Text = if ($InstallMode) { '确认并安装' } else { '保存' }
+        $saveButton.Text = if ($InstallMode) { '一键配置' } else { '保存' }
         $saveButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
         $saveButton.Location = New-Object System.Drawing.Point(399, 169)
         $saveButton.Size = New-Object System.Drawing.Size(94, 34)
@@ -1251,11 +1109,11 @@ catch {
             return
         }
         if (-not $installed) {
-            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置尚未准备运行环境：`r`n$dataRoot`r`n`r`n请先点击“准备 / 修复引擎”。"
+            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "项目内尚未配置运行环境：`r`n$dataRoot`r`n`r`n请先点击「一键配置 / 修复运行环境」。"
             return
         }
         if (-not $hasModel) {
-            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置没有 .safetensors 模型：`r`n$dataRoot`r`n`r`n请点击“添加模型”或“下载通用基础模型”。"
+            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "尚未找到模型，请放入项目 Models/Checkpoints 文件夹：`r`n$dataRoot`r`n`r`n请点击「添加模型」或「下载通用基础模型」。"
             return
         }
         Queue-SdwAction -Command 'start' -Parameters ([ordered]@{}) -DisplayName '启动 Stable Diffusion'
@@ -1301,11 +1159,11 @@ catch {
             return
         }
         if (-not $installed) {
-            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置尚未准备运行环境：`r`n$dataRoot`r`n`r`n请先点击“准备 / 修复引擎”。"
+            Show-SdwLifecycleNotice -Title '本地引擎尚未准备' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "项目内尚未配置运行环境：`r`n$dataRoot`r`n`r`n请先点击「一键配置 / 修复运行环境」。"
             return
         }
         if (-not $hasModel) {
-            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "当前存储位置没有 .safetensors 模型：`r`n$dataRoot`r`n`r`n请点击“添加模型”或“下载通用基础模型”。"
+            Show-SdwLifecycleNotice -Title '缺少生成模型' -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) -Message "尚未找到模型，请放入项目 Models/Checkpoints 文件夹：`r`n$dataRoot`r`n`r`n请点击「添加模型」或「下载通用基础模型」。"
             return
         }
         $script:OpenUiAfterStart = $true
@@ -1326,7 +1184,7 @@ catch {
     $stopButton.Add_Click({ Invoke-SdwStopFromUi })
     $doctorButton.Add_Click({ Queue-SdwAction -Command 'doctor' -Parameters ([ordered]@{}) -DisplayName '检查运行问题' })
     $openUiButton.Add_Click({ Invoke-SdwOpenUiFromUi })
-    $urlLink.Add_LinkClicked({ Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开生成界面' })
+    $urlLink.Add_Click({ Queue-SdwAction -Command 'open-ui' -Parameters ([ordered]@{}) -DisplayName '打开生成界面' })
     $openDataButton.Add_Click({ Queue-SdwAction -Command 'open-data' -Parameters ([ordered]@{}) -DisplayName '打开存储位置' })
     $openModelsButton.Add_Click({
         if (Test-SdwActionBusy) {
@@ -1420,17 +1278,16 @@ $($asset.LicenseUrl)
         }
     })
 
-    $timer = New-Object System.Windows.Forms.Timer
-    $timer.Interval = 120
+    $timer = New-Object Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(120)
     $timer.Add_Tick({
         Complete-SdwGpuProbe
         Drain-SdwProcessOutput
         Complete-SdwProcess
 
         if ($script:LogDirty) {
-            $logBox.Lines = $script:LogHistory.ToArray()
-            $logBox.SelectionStart = $logBox.TextLength
-            $logBox.ScrollToCaret()
+            $logBox.Text = $script:LogHistory.ToArray() -join [Environment]::NewLine
+            $logBox.ScrollToEnd()
             $script:LogDirty = $false
         }
 
@@ -1441,7 +1298,9 @@ $($asset.LicenseUrl)
         }
     })
 
-    $form.Add_Shown({
+    $window.Add_ContentRendered({
+        if (-not [string]::IsNullOrWhiteSpace($PreviewPath) -and -not $LiveStatusPreview) { return }
+        if ($script:LastStatusStarted -ne [datetime]::MinValue) { return }
         Add-SdwLogLine '启动器已就绪。所有安装和运行命令将通过 scripts\sdw.ps1 执行。'
         if (-not [string]::IsNullOrWhiteSpace($script:LauncherDataRoot)) {
             Add-SdwLogLine "已加载存储位置：$script:LauncherDataRoot"
@@ -1454,7 +1313,7 @@ $($asset.LicenseUrl)
         Start-SdwStatusRefresh
     })
 
-    $form.Add_FormClosing({
+    $window.Add_Closing({
         param($sender, $eventArgs)
         $script:Closing = $true
         $timer.Stop()
@@ -1476,9 +1335,8 @@ $($asset.LicenseUrl)
         }
     })
 
-    $form.Add_FormClosed({
+    $window.Add_Closed({
         $timer.Stop()
-        $timer.Dispose()
         Reset-SdwActiveProcess
         if ($null -ne $script:GpuProbe) {
             try { $script:GpuProbe.Stop() } catch {}
@@ -1486,15 +1344,49 @@ $($asset.LicenseUrl)
             $script:GpuProbe = $null
             $script:GpuProbeAsync = $null
         }
-        $toolTip.Dispose()
-        $form.Dispose()
+        $form.ReleaseHandle()
     })
 
     Update-SdwButtons
-    [void][System.Windows.Forms.Application]::Run($form)
+    if (-not [string]::IsNullOrWhiteSpace($PreviewPath)) {
+        $window.Width = $PreviewWidth; $window.Height = $PreviewHeight
+        $window.ShowActivated = $false; $window.ShowInTaskbar = $false
+        $window.Left = -20000; $window.Top = -20000
+        Update-SdwSummaryView ([pscustomobject]@{ status='ready'; running=$false; healthy=$false; installed=$true; hasModel=$true; dataRoot=$script:LauncherDataRoot; modelCount=2; url='http://127.0.0.1:7860'; profileName='Windows + NVIDIA'; profileId='blackwell-experimental' })
+        $gpuLabel.Text = 'NVIDIA GeForce RTX 5070 Laptop GPU'
+        $operationLabel.Text = '状态已同步'
+        $LogExpander.IsExpanded = [bool]$PreviewLogs
+        $logBox.Text = '[预览] 运行日志显示在这里。'
+        $window.Show()
+        if ($LiveStatusPreview) {
+            # Exercise the real dispatcher, GPU probe and read-only status subprocess.
+            $script:CurrentSummary = $null
+            $frame = New-Object Windows.Threading.DispatcherFrame
+            $timeout = New-Object Windows.Threading.DispatcherTimer
+            $timeout.Interval = [TimeSpan]::FromSeconds(12)
+            $timeout.Add_Tick({ $frame.Continue = $false })
+            $timeout.Start()
+            try { [Windows.Threading.Dispatcher]::PushFrame($frame) } finally { $timeout.Stop() }
+            if ($null -eq $script:CurrentSummary) { $window.Close(); throw 'Live status preview did not receive a backend summary.' }
+            Write-Output ('Live status: ' + (Get-SdwNormalizedState $script:CurrentSummary))
+        }
+        $window.UpdateLayout()
+        $bitmap = New-Object Windows.Media.Imaging.RenderTargetBitmap([int]$window.ActualWidth, [int]$window.ActualHeight, 96, 96, [Windows.Media.PixelFormats]::Pbgra32)
+        $bitmap.Render($window)
+        $encoder = New-Object Windows.Media.Imaging.PngBitmapEncoder
+        $encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap))
+        $output = [IO.Path]::GetFullPath($PreviewPath)
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($output))
+        $stream = [IO.File]::Create($output)
+        try { $encoder.Save($stream) } finally { $stream.Dispose() }
+        $window.Close()
+        Write-Output $output
+    }
+    else { [void]$window.ShowDialog() }
     exit 0
 }
 catch {
+    if (-not [string]::IsNullOrWhiteSpace($PreviewPath)) { throw }
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
         [void][System.Windows.Forms.MessageBox]::Show(

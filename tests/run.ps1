@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 Set-StrictMode -Version 2.0
@@ -197,13 +197,14 @@ Assert-SdwTest ($launcherSource -match 'Test-SdwLauncherPathEncrypted' -and
     $launcherSource -match 'Windows EFS') 'launcher rejects an EFS-encrypted install destination before setup'
 Assert-SdwTest ($launcherSource -match '\$actionGroup\.Text\s*=\s*if\s*\(\$busy\)') 'launcher visibly explains the locked action state during a long-running task'
 Assert-SdwTest ($launcherSource -match 'Join-Path\s+\$script:RepositoryRoot\s+''data''' -and
-    $launcherSource -match '\$settingsButton\s*=\s*New-SdwButton' -and
-    $launcherSource -match '\$settingsButton\.Add_Click') 'launcher defaults to a portable git-ignored data directory and exposes a path picker'
-Assert-SdwTest ($launcherSource -match '\$startButton\.Enabled\s*=\s*\$true' -and
-    $launcherSource -match '\$stopButton\.Enabled\s*=\s*\$true' -and
-    $launcherSource -match '\$openUiButton\.Enabled\s*=\s*\$true') 'primary lifecycle controls remain clickable and explain unmet prerequisites'
-Assert-SdwTest ($launcherSource -match '\$importButton\.Enabled\s*=\s*\$true' -and
-    $launcherSource -match '\$downloadButton\.Enabled\s*=\s*\$true') 'model add and base-model download controls remain clickable'
+    $launcherSource -match "'settingsButton'" -and
+    $launcherSource -match '\$settingsButton\.Add_Click' -and
+    $launcherSource -match '\$dataText.ReadOnly = \$true') 'launcher keeps its environment inside the project and exposes port settings'
+Assert-SdwTest ($launcherSource -match '\$startButton\.IsEnabled\s*=\s*\$true' -and
+    $launcherSource -match '\$stopButton\.IsEnabled\s*=\s*\$true' -and
+    $launcherSource -match '\$openUiButton\.IsEnabled\s*=\s*\$true') 'primary lifecycle controls remain clickable and explain unmet prerequisites'
+Assert-SdwTest ($launcherSource -match '\$importButton\.IsEnabled\s*=\s*\$true' -and
+    $launcherSource -match '\$downloadButton\.IsEnabled\s*=\s*\$true') 'model add and base-model download controls remain clickable'
 Assert-SdwTest ($launcherSource -match '(?s)Checkpoints.*VAE.*Hypernetworks.*LoRA|(?s)Checkpoints.*VAE.*LoRA.*Hypernetworks') 'model manager explains checkpoint, VAE, Hypernetwork, and LoRA folders'
 Assert-SdwTest ($launcherSource -match 'OpenUiAfterStart' -and
     $launcherSource -match "(?s)function\s+Invoke-SdwOpenUiFromUi.*?Queue-SdwAction\s+-Command\s+'start'") 'open WebUI can start a ready backend before opening the browser'
@@ -216,4 +217,7 @@ $bootstrapSources = @(
 Assert-SdwTest ($bootstrapSources -notmatch '(?im)\bsetx(?:\.exe)?\b|\[Environment\]::SetEnvironmentVariable\s*\(') 'bootstrap never writes user or machine environment variables'
 Assert-SdwTest ($entrypoint -notmatch '(?im)\bpython(?:3|\.exe)?\b|\bpip(?:\.exe)?\b|\bgit(?:\.exe)?\b') 'double-click entry point has no dependency on system Python, pip, or Git'
 
+$defaultPaths = Get-SdwPaths -RepositoryRoot $repositoryRoot
+Assert-SdwTest ($defaultPaths.DataRoot -eq (Join-Path $repositoryRoot 'data') -and $defaultPaths.ModelsRoot -eq (Join-Path $repositoryRoot 'Models') -and $defaultPaths.OutputsRoot -eq (Join-Path $repositoryRoot 'Outputs')) 'default environment, models and outputs are all project-local'
+Assert-SdwTest ($supervisorSource -match 'Get-SdwPaths -RepositoryRoot' -and $supervisorSource -match '''--models-dir'', \$modelsRoot' -and $supervisorSource -match 'OutputsRoot \$managedPaths.OutputsRoot') 'supervisor shares launcher paths including models and saved output defaults'
 Write-Host ("All {0} tests passed." -f $script:Passed) -ForegroundColor Green

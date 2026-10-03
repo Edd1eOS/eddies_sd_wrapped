@@ -38,14 +38,7 @@ function Resolve-SdwDataRoot {
     param([string]$DataRoot)
 
     if ([string]::IsNullOrWhiteSpace($DataRoot)) {
-        $local = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
-        if ([string]::IsNullOrWhiteSpace($local)) {
-            $local = $env:LOCALAPPDATA
-        }
-        if ([string]::IsNullOrWhiteSpace($local)) {
-            Throw-SdwError -Message 'LOCALAPPDATA is unavailable. Specify -DataRoot explicitly.' -ExitCode 2
-        }
-        $DataRoot = Join-Path $local 'StableDiffusionWorkbench'
+        $DataRoot = Join-Path $script:SdwRepositoryRoot 'data'
     }
 
     return [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($DataRoot))
@@ -59,10 +52,18 @@ function Get-SdwPaths {
     )
 
     $repo = [System.IO.Path]::GetFullPath($RepositoryRoot)
+    if ([string]::IsNullOrWhiteSpace($DataRoot)) { $DataRoot = Join-Path $repo 'data' }
     $root = Resolve-SdwDataRoot -DataRoot $DataRoot
     $runtime = Join-Path $root 'runtime'
     $userdata = Join-Path $root 'userdata'
     $models = Join-Path $userdata 'models'
+    $outputs = Join-Path $userdata 'outputs'
+    $embeddings = Join-Path $userdata 'embeddings'
+    if ($root.TrimEnd('\') -eq (Join-Path $repo 'data')) {
+        $models = Join-Path $repo 'Models'
+        $outputs = Join-Path $repo 'Outputs'
+        $embeddings = Join-Path $models 'Embeddings'
+    }
     $stateDirectory = Join-Path $root 'state'
     $logs = Join-Path $root 'logs'
 
@@ -88,8 +89,8 @@ function Get-SdwPaths {
         LoraRoot = Join-Path $models 'Lora'
         VaeRoot = Join-Path $models 'VAE'
         HypernetworksRoot = Join-Path $models 'Hypernetworks'
-        EmbeddingsRoot = Join-Path $userdata 'embeddings'
-        OutputsRoot = Join-Path $userdata 'outputs'
+        EmbeddingsRoot = $embeddings
+        OutputsRoot = $outputs
         UpstreamLockPath = Join-Path $repo 'configs\upstream-lock.json'
         ProfilesRoot = Join-Path $repo 'profiles'
         StarterModelsPath = Join-Path $repo 'asset-manifests\starter-models.json'
@@ -107,6 +108,7 @@ function Initialize-SdwLayout {
         $Paths.UserDataRoot, $Paths.ModelsRoot, $Paths.CheckpointsRoot,
         $Paths.LoraRoot, $Paths.VaeRoot, $Paths.HypernetworksRoot,
         $Paths.EmbeddingsRoot, $Paths.OutputsRoot
+        (Join-Path $Paths.ModelsRoot 'Codeformer'), (Join-Path $Paths.ModelsRoot 'GFPGAN')
     )
     foreach ($directory in $directories) {
         if (-not (Test-Path -LiteralPath $directory -PathType Container)) {

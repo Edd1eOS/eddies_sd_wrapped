@@ -4,7 +4,7 @@
 
 ## Python 版本需求
 
-无需预装 Python。仓库不直接包含 Python；首次点击“准备 / 修复引擎”时会自动下载隔离的便携 Python 3.10.6，不修改系统 Python 或 `PATH`。
+无需预装 Python。首次点击“一键配置 / 修复运行环境”，自动下载并配置独立 Python 3.10.6、引擎和依赖，需要联网及数 GB 下载；不修改系统 Python 或 `PATH`。
 
 ## 使用方式
 
@@ -13,6 +13,8 @@ git clone https://github.com/Edd1eOS/eddies_sd_wrapped.git
 cd eddies_sd_wrapped
 & ".\Start Stable Diffusion.cmd"
 ```
+
+首次：一键配置运行环境 → 添加模型 → 打开生成界面。环境在项目 `data/`，模型在 `Models/`，结果在 `Outputs/`。
 
 ## 目录
 
